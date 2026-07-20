@@ -73,11 +73,39 @@ public final class TiledCanvas {
         this.maxTy = Integer.MIN_VALUE;
     }
 
-    // ---------- 包内可见的瓦片访问 ----------
-    Tile getTile(int tx, int ty) {
+
+    /**
+     * 获取指定瓦片的句柄。返回的 Tile 对象仅用于读取像素数据（通过 {@link Tile#getPixelsSnapshot()}），
+     * 不应直接修改其内部数组。如果需要写入，请使用 {@link #setPixel}、{@link #writeBytes}、{@link #fillRect} 等公开 API。
+     *
+     * @param tx 瓦片 X 索引（支持负数）
+     * @param ty 瓦片 Y 索引（支持负数）
+     * @return 瓦片句柄，若瓦片不存在则返回 null
+     */
+    public Tile getTile(int tx, int ty) {
         return tiles.get(pack(tx, ty));
     }
 
+    /**
+     * 遍历所有存在的瓦片，对每个瓦片调用回调函数。
+     * 回调函数接收三个参数：瓦片索引 tx、ty 以及只读的像素数据数组。
+     * <p>
+     * 注意：像素数据数组是内部数组的直接引用，仅用于读取，不应修改。
+     * 若需要写入，请使用其他公开 API。
+     *
+     * @param visitor 回调函数，接受 (tx, ty, data)
+     */
+    public void forEachTile(TileVisitor visitor) {
+        for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
+            long key = entry.getKey();
+            int tx = unpackTx(key);
+            int ty = unpackTy(key);
+            float[] data = entry.getValue().getPixelsSnapshot();
+            visitor.visit(tx, ty, data);
+        }
+    }
+
+    // ---------- 包内可见的瓦片访问 ----------
     Tile ensureTile(int tx, int ty) {
         long key = pack(tx, ty);
         Tile tile = tiles.get(key);
