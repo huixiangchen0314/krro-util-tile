@@ -2,8 +2,11 @@ package top.kzre.krro.util.tile;
 
 import top.kzre.krro.util.pool.FloatsPools;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * 瓦片画布 —— 高性能 RGBA float 图像存储，支持负索引和动态扩展。
@@ -51,7 +54,7 @@ public final class TiledCanvas {
     // ---------- 字段 ----------
     final int tileSize;
     private final ConcurrentHashMap<Long, Tile> tiles;
-    final float[] defaultPixel;
+    private final float[] defaultPixel;
     private volatile int minTx, maxTx, minTy, maxTy;
 
     // ---------- 构造器 ----------
@@ -486,6 +489,111 @@ public final class TiledCanvas {
         minTy = minY;
         maxTy = maxY;
     }
+    // 特殊暴露，外部不该直接修改
+    public float[] getDefaultPixel() {
+        return defaultPixel;
+    }
+
+    /**
+     * 以只读方式遍历当前所有瓦片，将打包键和像素数组的映射传递给 consumer。
+     * <p>
+     * 像素数组是内部数据的直接引用，<b>仅在此回调期间有效</b>，调用者严禁：
+     * <ul>
+     *   <li>修改返回的 float[] 内容</li>
+     *   <li>将数组或 Map 的引用保存到回调外部</li>
+     * </ul>
+     * 此设计避免了内存拷贝，同时通过引用计数和 COW 保证了读取期间数据不会被并发写入破坏。
+     *
+     * @param consumer 接收瓦片映射的回调，键为 pack(tx, ty)，值为瓦片像素数组（只读）
+     */
+    public void readTiles(Consumer<Map<Long, float[]>> consumer) {
+        Map<Long, float[]> snapshot = new HashMap<>();
+        for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
+            snapshot.put(entry.getKey(), entry.getValue().getPixelsSnapshot());
+        }
+        consumer.accept(Collections.unmodifiableMap(snapshot));
+    }
 
 
+    /**
+     * 合并瓦片数据（零拷贝）。
+     * <p>
+     * 直接使用传入的像素数组，<b>不进行复制</b>。调用者必须满足：
+     * <ul>
+     *   <li>数组长度必须为 {@code tileSize * tileSize * CHANNELS}</li>
+     *   <li>数组必须是从 {@link top.kzre.krro.util.pool.FloatsPools} 获取的，
+     *       且调用者<b>转移所有权</b>给本画布，之后不得再修改或释放该数组</li>
+     *   <li>若数组不符合池化要求（例如是普通 {@code new float[]}），
+     *       将导致池污染和未定义行为，所有风险由调用者承担</li>
+     * </ul>
+     * <p>
+     * 未出现在映射中的现有瓦片保持不变。若键已存在，则通过 {@link Tile#replaceData} 替换数据。
+     *
+     * @param newTiles 要合并的瓦片映射，键为 pack(tx, ty)，值为 RGBA float 数组（所有权转移）
+     * @throws IllegalArgumentException 如果任意数组长度不匹配
+     */
+    public TiledCanvas mergeTiles(Map<Long, float[]> newTiles) {
+        int expectedLen = tileSize * tileSize * CHANNELS;
+        for (Map.Entry<Long, float[]> entry : newTiles.entrySet()) {
+            long key = entry.getKey();
+            float[] src = entry.getValue();
+
+            if (src.length != expectedLen) {
+                throw new IllegalArgumentException(
+                        "Pixel array length mismatch: expected " + expectedLen + ", got " + src.length);
+            }
+
+            TileData newData = new TileData(src);    // 直接使用外部数组，引用计数 = 1
+
+            Tile existingTile = tiles.get(key);
+            if (existingTile != null) {
+                existingTile.replaceData(newData);   // 内部管理引用计数
+            } else {
+                Tile newTile = new Tile(unpackTx(key), unpackTy(key), newData);
+                tiles.put(key, newTile);
+            }
+
+            synchronized (this) {
+                updateExtent(unpackTx(key), unpackTy(key));
+            }
+        }
+        return this;
+    }
+
+    /**
+     * 将另一个画布的所有瓦片合并到当前画布中。
+     * 已存在的瓦片会被替换，未存在的会被添加。源画布的数据通过引用计数共享，
+     * 后续修改会在 COW 机制下自动分离。
+     *
+     * @param canvas 源画布，其 tileSize 必须与当前画布相同
+     * @throws IllegalArgumentException 如果 tileSize 不匹配
+     */
+    public TiledCanvas mergeCanvas(TiledCanvas canvas) {
+        if (canvas.tileSize != this.tileSize) {
+            throw new IllegalArgumentException("tileSize mismatch");
+        }
+        for (Map.Entry<Long, Tile> entry : canvas.tiles.entrySet()) {
+            long key = entry.getKey();
+            Tile srcTile = entry.getValue();
+            TileData srcData = srcTile.getDataRef();
+            // 增加引用计数，代表当前画布将持有一个引用
+            srcData.acquire();
+
+            Tile existingTile = this.tiles.get(key);
+            if (existingTile != null) {
+                // 释放目标画布原有的瓦片数据
+                existingTile.getDataRef().release();
+                // 直接替换为新的 Tile（使用同一个 TileData）
+                this.tiles.put(key, new Tile(unpackTx(key), unpackTy(key), srcData));
+            } else {
+                this.tiles.put(key, new Tile(unpackTx(key), unpackTy(key), srcData));
+                // 仅在新添加瓦片时更新范围
+                synchronized (this) {
+                    updateExtent(unpackTx(key), unpackTy(key));
+                }
+            }
+
+        }
+        return this;
+    }
 }

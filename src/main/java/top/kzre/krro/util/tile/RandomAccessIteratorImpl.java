@@ -85,7 +85,7 @@ final class RandomAccessIteratorImpl implements RandomAccessIterator {
             out[2] = currentData[offset + 2];
             out[3] = currentData[offset + 3];
         } else {
-            System.arraycopy(canvas.defaultPixel, 0, out, 0, TiledCanvas.CHANNELS);
+            System.arraycopy(canvas.getDefaultPixel(), 0, out, 0, TiledCanvas.CHANNELS);
         }
     }
 

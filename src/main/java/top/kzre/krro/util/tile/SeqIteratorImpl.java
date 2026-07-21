@@ -124,7 +124,7 @@ public  final class SeqIteratorImpl implements SequentialIterator {
             out[2] = curTileData[tileOffset + 2];
             out[3] = curTileData[tileOffset + 3];
         } else {
-            System.arraycopy(canvas.defaultPixel, 0, out, 0, TiledCanvas.CHANNELS);
+            System.arraycopy(canvas.getDefaultPixel(), 0, out, 0, TiledCanvas.CHANNELS);
         }
     }
 
