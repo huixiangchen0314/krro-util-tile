@@ -134,6 +134,8 @@ public final class TiledCanvas {
                 data.release();
                 return existing;
             }
+            // 注册到全局管理器
+            TileStorageManager.instance().register(data);
             synchronized (this) {
                 updateExtent(tx, ty);
             }
@@ -151,6 +153,10 @@ public final class TiledCanvas {
                 recomputeExtent();
             }
         }
+    }
+
+    public int tileCount() {
+        return this.tiles.size();
     }
 
     // ---------- 公开的像素读写 ----------

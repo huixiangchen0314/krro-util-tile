@@ -1,11 +1,8 @@
 package top.kzre.krro.util.tile;
 
-
-import lombok.Getter;
-import lombok.Setter;
-
-import java.util.Map;
-import java.util.WeakHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 class TileStorageManager {
     private static volatile TileStorageManager INSTANCE;
@@ -15,117 +12,68 @@ class TileStorageManager {
             synchronized (TileStorageManager.class) {
                 if (INSTANCE == null) {
                     INSTANCE = new TileStorageManager();
+                    // 注册 JVM 关闭钩子，确保后台线程被终止
+                    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                        if (INSTANCE != null) {
+                            INSTANCE.shutdown();
+                        }
+                    }, "Krro-Tile-Shutdown"));
                 }
             }
         }
         return INSTANCE;
     }
 
-    @Getter
-    private static class TileAccess {
-        private final int size;
-        @Setter
-        private long lastAccessTime;
-
-        TileAccess(int size, long lastAccessTime) {
-            this.size = size;
-            this.lastAccessTime = lastAccessTime;
+    private final StorageLevel heapLevel = new StorageLevel() {
+        @Override
+        protected boolean demote(TileData data) {
+            return data.demoteToDirect();
         }
+    };
 
+    private final ScheduledExecutorService scheduler;
+
+    private TileStorageManager() {
+        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "Krro Tile Evictor");
+            t.setDaemon(true);
+            return t;
+        });
+        scheduler.scheduleWithFixedDelay(this::evictIfNeeded, 3, 3, TimeUnit.SECONDS);
     }
 
-    public static class Config {
-        private long maxHeapMemoryBytes = 256L * 1024 * 1024;
-        private long maxDirectMemoryBytes = 256L * 1024 * 1024;
-
-        public synchronized void setMaxHeapMemoryBytes(long bytes) {
-            this.maxHeapMemoryBytes = bytes;
-        }
-
-        public synchronized long getMaxHeapMemoryBytes() {
-            return maxHeapMemoryBytes;
-        }
-
-        public synchronized void setMaxDirectMemoryBytes(long bytes) {
-            this.maxDirectMemoryBytes = bytes;
-        }
-
-        public synchronized long getMaxDirectMemoryBytes() {
-            return maxDirectMemoryBytes;
-        }
+    /** 注册一个 HEAP 瓦片（由 TiledCanvas 在 ensureTile 后调用） */
+    public void register(TileData data) {
+        heapLevel.register(data);
     }
 
-    @Getter
-    private final Config config = new Config();
-    private final WeakHashMap<TileData, TileAccess> tiles = new WeakHashMap<>();
-
-    private TileStorageManager() {}
-
-    public synchronized void report(TileData data) {
-        TileAccess access = tiles.get(data);
-        if (access == null) {
-            tiles.put(data, new TileAccess(data.getByteSize(), System.nanoTime()));
-            evictIfNeeded();      // 新瓦片首次报告，检查并触发淘汰
-        } else {
-            access.setLastAccessTime(System.nanoTime());
-        }
+    /** 移除瓦片记录（由 TileData.dispose 自动调用，也可手动调用） */
+    public void remove(TileData data) {
+        heapLevel.remove(data);
     }
 
-    public synchronized void remove(TileData data) {
-        tiles.remove(data);
+    /** 当前堆内存占用（字节） */
+    public long totalHeapMemory() {
+        return heapLevel.totalMemory();
     }
 
-    public synchronized long totalHeapMemory() {
-        long total = 0;
-        for (Map.Entry<TileData, TileAccess> entry : tiles.entrySet()) {
-            if (entry.getKey().getLevel() == CacheLevel.HEAP) {
-                total += entry.getValue().getSize();
-            }
-        }
-        return total;
+    /** 手动触发淘汰（通常由后台定时执行） */
+    public void evictIfNeeded() {
+        heapLevel.evictIfNeeded();
     }
 
-    /**
-     * 若堆内存超限，找到最久未使用的 HEAP 瓦片降级为 DIRECT，直到内存回到阈值以下。
-     */
-    public synchronized void evictIfNeeded() {
-        long maxHeap = config.getMaxHeapMemoryBytes();
-        while (totalHeapMemory() > maxHeap && !tiles.isEmpty()) {
-            TileData candidate = findLRUHeapTile();
-            if (candidate == null) {
-                break;
-            }
-            if (!candidate.demoteToDirect()) {
-                break;
-            }
-        }
+    /** 设置最大堆瓦片数 */
+    public void setMaxHeapTiles(int max) {
+        heapLevel.setMaxTiles(max);
     }
 
-    /**
-     * 从当前跟踪的瓦片中找出最久未访问且可降级（引用计数为1，状态为HEAP）的瓦片。
-     * 必须在持有 TileStorageManager 对象锁时调用。
-     * @return 候选瓦片，若没有符合条件者则返回 null
-     */
-    private TileData findLRUHeapTile() {
-        TileData candidate = null;
-        long oldestTime = Long.MAX_VALUE;
-        for (Map.Entry<TileData, TileAccess> entry : tiles.entrySet()) {
-            TileData data = entry.getKey();
-            if (data.getLevel() != CacheLevel.HEAP || data.refCount() != 1) {
-                continue;
-            }
-            TileAccess access = entry.getValue();
-            if (access.getLastAccessTime() < oldestTime) {
-                oldestTime = access.getLastAccessTime();
-                candidate = data;
-            }
-        }
-        return candidate;
+    /** 设置最大堆内存阈值（字节） */
+    public void setMaxHeapMemoryBytes(long bytes) {
+        heapLevel.setMaxMemoryBytes(bytes);
     }
 
-    // 仅供测试使用
-    void reset() {
-        tiles.clear();
-        config.setMaxHeapMemoryBytes(256L * 1024 * 1024);
+    /** 关闭后台线程 */
+    public void shutdown() {
+        scheduler.shutdown();
     }
 }
