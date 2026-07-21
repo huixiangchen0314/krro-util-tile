@@ -1,5 +1,6 @@
 package top.kzre.krro.util.tile;
 
+import lombok.Getter;
 import top.kzre.krro.util.pool.FloatsPools;
 
 import java.util.Collections;
@@ -52,10 +53,21 @@ public final class TiledCanvas {
     public static final int CHANNELS = 4;
 
     // ---------- 字段 ----------
+    @Getter
     final int tileSize;
     private final ConcurrentHashMap<Long, Tile> tiles;
+    // 特殊暴露，外部不该直接修改
+    @Getter
     private final float[] defaultPixel;
-    private volatile int minTx, maxTx, minTy, maxTy;
+    // ---------- 范围查询 ----------
+    @Getter
+    private volatile int minTx;
+    @Getter
+    private volatile int maxTx;
+    @Getter
+    private volatile int minTy;
+    @Getter
+    private volatile int maxTy;
 
     // ---------- 构造器 ----------
     public TiledCanvas(int tileSize) {
@@ -378,12 +390,6 @@ public final class TiledCanvas {
         }
     }
 
-    // ---------- 范围查询 ----------
-    public int getMinTx() { return minTx; }
-    public int getMaxTx() { return maxTx; }
-    public int getMinTy() { return minTy; }
-    public int getMaxTy() { return maxTy; }
-
     public void getBounds(int[] out) {
         if (out == null || out.length < 4)
             throw new IllegalArgumentException("out array must have length >= 4");
@@ -397,8 +403,7 @@ public final class TiledCanvas {
         out[3] = (maxTy + 1) * tileSize - 1;
     }
 
-    public int getTileSize() { return tileSize; }
-    public int tileCount() { return tiles.size(); }
+    public int totalSize() { return tiles.size(); }
 
     // ---------- 迭代器工厂 ----------
     public SequentialIterator createSequentialIterator(int x, int y, int w, int h,
@@ -488,10 +493,6 @@ public final class TiledCanvas {
         maxTx = maxX;
         minTy = minY;
         maxTy = maxY;
-    }
-    // 特殊暴露，外部不该直接修改
-    public float[] getDefaultPixel() {
-        return defaultPixel;
     }
 
     /**

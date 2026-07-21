@@ -69,7 +69,7 @@ class TiledCanvasTest {
     @Test
     void singlePixelShouldCreateOnlyOneTile() {
         canvas.setPixel(70, 80, 1, 1, 1, 1);
-        assertEquals(1, canvas.tileCount());
+        assertEquals(1, canvas.totalSize());
         long expectedKey = TiledCanvas.pack(
                 TiledCanvas.tileX(70, TILE_SIZE),
                 TiledCanvas.tileY(80, TILE_SIZE));
@@ -86,7 +86,7 @@ class TiledCanvasTest {
         for (int x = 10; x <= 20; x++) {
             canvas.setPixel(x, 10, 1, 1, 1, 1);
         }
-        assertEquals(1, canvas.tileCount(), "Line confined to one tile should create exactly 1 tile");
+        assertEquals(1, canvas.totalSize(), "Line confined to one tile should create exactly 1 tile");
     }
 
     @Test
@@ -95,7 +95,7 @@ class TiledCanvasTest {
         for (int i = 0; i <= 63; i++) {
             canvas.setPixel(i, i, 1, 1, 1, 1);
         }
-        assertEquals(1, canvas.tileCount());
+        assertEquals(1, canvas.totalSize());
     }
 
     @Test
@@ -105,7 +105,7 @@ class TiledCanvasTest {
             canvas.setPixel(x, 0, 1, 1, 1, 1);
         }
         // 应有两个瓦片：(-1,0)? 不，x=0..64 覆盖两个瓦片：tx=0 和 tx=1
-        assertEquals(2, canvas.tileCount());
+        assertEquals(2, canvas.totalSize());
         // 验证 tile (0,0) 和 (1,0) 存在
         assertNotNull(canvas.getTile(0, 0));
         assertNotNull(canvas.getTile(1, 0));
@@ -181,7 +181,7 @@ class TiledCanvasTest {
     void clearShouldWipeAllTiles() {
         canvas.setPixel(1, 1, 1, 1, 1, 1);
         canvas.clear();
-        assertEquals(0, canvas.tileCount());
+        assertEquals(0, canvas.totalSize());
         float[] out = new float[4];
         canvas.getPixel(1, 1, out);
         assertArrayEquals(DEFAULT_PIXEL, out, 0.001f);

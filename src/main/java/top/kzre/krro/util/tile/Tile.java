@@ -75,4 +75,8 @@ public final class Tile {
     synchronized TileData getDataRef() {
         return data;
     }
+
+    public synchronized void setCacheLevel(CacheLevel level){
+
+    }
 }
