@@ -30,12 +30,12 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         if (curX < startX || curX > endX || curY < startY || curY > endY) {
             return false;
         }
-        int tx = TiledCanvas.tileX(curX, canvas.tileSize);
-        int ty = TiledCanvas.tileY(curY, canvas.tileSize);
+        int tx = TiledCanvas.tileX(curX, canvas.getTileSize());
+        int ty = TiledCanvas.tileY(curY, canvas.getTileSize());
 
         if (writable) {
             currentTile = canvas.ensureTile(tx, ty);
-            curTileData = currentTile.getPixelsForWrite(canvas.tileSize);
+            curTileData = currentTile.getPixelsForWrite(canvas.getTileSize());
         } else {
             currentTile = canvas.getTile(tx, ty);
             if (currentTile != null) {
@@ -46,9 +46,9 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         }
 
         if (curTileData != null) {
-            int lx = TiledCanvas.localX(curX, canvas.tileSize);
-            int ly = TiledCanvas.localY(curY, canvas.tileSize);
-            tileOffset = (ly * canvas.tileSize + lx) * TiledCanvas.CHANNELS;
+            int lx = TiledCanvas.localX(curX, canvas.getTileSize());
+            int ly = TiledCanvas.localY(curY, canvas.getTileSize());
+            tileOffset = (ly * canvas.getTileSize() + lx) * TiledCanvas.CHANNELS;
         }
         return true;
     }
@@ -134,13 +134,13 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         if (!hasCurrent) throw new IllegalStateException("Iterator exhausted or not started");
 
         if (curTileData == null) {
-            int tx = TiledCanvas.tileX(curX, canvas.tileSize);
-            int ty = TiledCanvas.tileY(curY, canvas.tileSize);
+            int tx = TiledCanvas.tileX(curX, canvas.getTileSize());
+            int ty = TiledCanvas.tileY(curY, canvas.getTileSize());
             currentTile = canvas.ensureTile(tx, ty);
-            curTileData = currentTile.getPixelsForWrite(canvas.tileSize);
-            int lx = TiledCanvas.localX(curX, canvas.tileSize);
-            int ly = TiledCanvas.localY(curY, canvas.tileSize);
-            tileOffset = (ly * canvas.tileSize + lx) * TiledCanvas.CHANNELS;
+            curTileData = currentTile.getPixelsForWrite(canvas.getTileSize());
+            int lx = TiledCanvas.localX(curX, canvas.getTileSize());
+            int ly = TiledCanvas.localY(curY, canvas.getTileSize());
+            tileOffset = (ly * canvas.getTileSize() + lx) * TiledCanvas.CHANNELS;
         }
         curTileData[tileOffset] = r;
         curTileData[tileOffset + 1] = g;

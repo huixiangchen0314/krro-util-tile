@@ -1,68 +1,352 @@
 package top.kzre.krro.util.tile;
 
+import java.util.*;
+import java.util.function.Consumer;
+
 /**
- * 画布视图，代表一个矩形子区域，提供独立的迭代器和批量操作。
- * 视图不可变，线程安全。
+ * 画布视图，基于瓦片坐标的矩形区域，实现 {@link Canvas} 接口。
+ * 视图由一个起始瓦片索引 (minTx, minTy) 和瓦片数量 (tileW, tileH) 定义。
+ * 所有读写操作均被限制在视图瓦片范围内，视图外的瓦片不可见且不会被修改。
+ * 线程安全依赖于底层 {@link TiledCanvas}。
  */
-public interface CanvasView {
+final class CanvasView implements Canvas {
+    private final Canvas canvas;
+    private final int minTx;    // 视图左上角瓦片 X 索引（包含）
+    private final int minTy;    // 视图左上角瓦片 Y 索引（包含）
+    private final int tileW;    // 视图宽度（瓦片数）
+    private final int tileH;    // 视图高度（瓦片数）
 
-    int x();
-    int y();
-    int width();
-    int height();
+    CanvasView(TiledCanvas canvas, int minTx, int minTy, int tileW, int tileH) {
+        if (tileW <= 0 || tileH <= 0) {
+            throw new IllegalArgumentException("Tile width and height must be positive");
+        }
+        this.canvas = canvas;
+        this.minTx = minTx;
+        this.minTy = minTy;
+        this.tileW = tileW;
+        this.tileH = tileH;
+    }
 
-    /**
-     * 创建顺序迭代器（默认行优先）。
-     * @param writable 是否可写
-     */
-    SequentialIterator sequentialIterator(boolean writable);
+    // ───────── Canvas 接口实现 ─────────
 
-    /**
-     * 创建指定扫描顺序的顺序迭代器。
-     */
-    SequentialIterator sequentialIterator(boolean writable, ScanOrder order);
+    @Override
+    public int getTileSize() {
+        return canvas.getTileSize();
+    }
 
-    /**
-     * 创建随机访问迭代器。
-     */
-    RandomAccessIterator randomAccessIterator(boolean writable);
+    @Override
+    public int getMinTileX() {
+        return minTx;
+    }
 
-    /**
-     * 将视图区域的数据读入外部缓冲区（相对于视图坐标）。
-     * @param dest 目标数组
-     * @param destOffset 起始偏移（像素数）
-     * @param rowStride 目标行步长（像素数，≤0 表示使用 width）
-     */
-    void readBytes(float[] dest, int destOffset, int rowStride);
+    @Override
+    public int getMaxTileX() {
+        return minTx + tileW - 1;
+    }
 
-    /**
-     * 将外部数据写入视图区域。
-     */
-    void writeBytes(float[] src, int srcOffset, int rowStride);
+    @Override
+    public int getMinTileY() {
+        return minTy;
+    }
 
-    /**
-     * 用指定颜色填充视图区域。
-     */
-    void fill(float[] color);
+    @Override
+    public int getMaxTileY() {
+        return minTy + tileH - 1;
+    }
 
-    /**
-     * 创建子视图（相对于当前视图坐标）。
-     * @param x 子视图左上角 X（相对）
-     * @param y 子视图左上角 Y（相对）
-     * @param w 宽度
-     * @param h 高度
-     */
-    CanvasView subView(int x, int y, int w, int h);
+    @Override
+    public float[] getDefaultPixel() {
+        return canvas.getDefaultPixel();
+    }
 
-    /**
-     * 从另一个视图复制数据（覆盖本视图区域）。
-     * 两个视图的尺寸必须相同，或源视图区域完全覆盖目标。
-     * @param src 源视图
-     */
-    void copyFrom(CanvasView src);
+    @Override
+    public Tile getTile(int tx, int ty) {
+        if (tx < minTx || tx > getMaxTileX() || ty < minTy || ty > getMaxTileY()) {
+            return null;
+        }
+        return canvas.getTile(tx, ty);
+    }
 
-    /**
-     * 从另一个视图的指定位置复制数据到本视图的当前位置（保持尺寸一致）。
-     */
-    void copyFrom(CanvasView src, int srcX, int srcY);
+    @Override
+    public void forEachTile(TileVisitor visitor) {
+        for (int ty = minTy; ty <= getMaxTileY(); ty++) {
+            for (int tx = minTx; tx <= getMaxTileX(); tx++) {
+                Tile tile = canvas.getTile(tx, ty);
+                if (tile != null) {
+                    float[] data = tile.getPixelsSnapshot();
+                    visitor.visit(tx, ty, data);
+                }
+            }
+        }
+    }
+
+    @Override
+    public int tileCount() {
+        int count = 0;
+        for (int ty = minTy; ty <= getMaxTileY(); ty++) {
+            for (int tx = minTx; tx <= getMaxTileX(); tx++) {
+                if (canvas.getTile(tx, ty) != null) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    // ── 像素读写：将世界坐标转换为瓦片坐标，再委托给底层画布 ──
+    @Override
+    public void getPixel(int worldX, int worldY, float[] out) {
+        int tileSize = getTileSize();
+        int tx = TiledCanvas.tileX(worldX, tileSize);
+        int ty = TiledCanvas.tileY(worldY, tileSize);
+        if (tx < minTx || tx > getMaxTileX() || ty < minTy || ty > getMaxTileY()) {
+            Arrays.fill(out, 0f);
+            return;
+        }
+        canvas.getPixel(worldX, worldY, out);
+    }
+
+    @Override
+    public void setPixel(int worldX, int worldY, float r, float g, float b, float a) {
+        int tileSize = getTileSize();
+        int tx = TiledCanvas.tileX(worldX, tileSize);
+        int ty = TiledCanvas.tileY(worldY, tileSize);
+        if (tx < minTx || tx > getMaxTileX() || ty < minTy || ty > getMaxTileY()) {
+            return;
+        }
+        canvas.setPixel(worldX, worldY, r, g, b, a);
+    }
+
+    @Override
+    public void readBytes(float[] dest, int destOffset, int worldX, int worldY,
+                          int w, int h, int destRowStride) {
+        int tileSize = getTileSize();
+        int viewMinX = minTx * tileSize;
+        int viewMinY = minTy * tileSize;
+        int viewMaxX = (getMaxTileX() + 1) * tileSize;
+        int viewMaxY = (getMaxTileY() + 1) * tileSize;
+
+        int x0 = Math.max(worldX, viewMinX);
+        int y0 = Math.max(worldY, viewMinY);
+        int x1 = Math.min(worldX + w, viewMaxX);
+        int y1 = Math.min(worldY + h, viewMaxY);
+        if (x0 >= x1 || y0 >= y1) return;
+
+        int offsetX = x0 - worldX;
+        int offsetY = y0 - worldY;
+        int stride = (destRowStride <= 0) ? w : destRowStride;
+        int adjustedOffset = destOffset + (offsetY * stride + offsetX) * TiledCanvas.CHANNELS;
+
+        canvas.readBytes(dest, adjustedOffset, x0, y0, x1 - x0, y1 - y0, stride);
+    }
+
+    @Override
+    public void writeBytes(float[] src, int srcOffset, int worldX, int worldY,
+                           int w, int h, int srcRowStride) {
+        int tileSize = getTileSize();
+        int viewMinX = minTx * tileSize;
+        int viewMinY = minTy * tileSize;
+        int viewMaxX = (getMaxTileX() + 1) * tileSize;
+        int viewMaxY = (getMaxTileY() + 1) * tileSize;
+
+        int x0 = Math.max(worldX, viewMinX);
+        int y0 = Math.max(worldY, viewMinY);
+        int x1 = Math.min(worldX + w, viewMaxX);
+        int y1 = Math.min(worldY + h, viewMaxY);
+        if (x0 >= x1 || y0 >= y1) return;
+
+        int offsetX = x0 - worldX;
+        int offsetY = y0 - worldY;
+        int stride = (srcRowStride <= 0) ? w : srcRowStride;
+        int adjustedOffset = srcOffset + (offsetY * stride + offsetX) * TiledCanvas.CHANNELS;
+
+        canvas.writeBytes(src, adjustedOffset, x0, y0, x1 - x0, y1 - y0, stride);
+    }
+
+    @Override
+    public void fillRect(int worldX, int worldY, int w, int h, float[] color) {
+        int tileSize = getTileSize();
+        int viewMinX = minTx * tileSize;
+        int viewMinY = minTy * tileSize;
+        int viewMaxX = (getMaxTileX() + 1) * tileSize;
+        int viewMaxY = (getMaxTileY() + 1) * tileSize;
+
+        int x0 = Math.max(worldX, viewMinX);
+        int y0 = Math.max(worldY, viewMinY);
+        int x1 = Math.min(worldX + w, viewMaxX);
+        int y1 = Math.min(worldY + h, viewMaxY);
+        if (x0 >= x1 || y0 >= y1) return;
+
+        canvas.fillRect(x0, y0, x1 - x0, y1 - y0, color);
+    }
+
+    @Override
+    public void clear() {
+        canvas.fillRect(minTx * getTileSize(), minTy * getTileSize(),
+                tileW * getTileSize(), tileH * getTileSize(),
+                canvas.getDefaultPixel());
+    }
+
+    @Override
+    public void getBounds(int[] out) {
+        if (out == null || out.length < 4)
+            throw new IllegalArgumentException("out array must have length >= 4");
+        out[0] = minTx * getTileSize();
+        out[1] = minTy * getTileSize();
+        out[2] = (getMaxTileX() + 1) * getTileSize() - 1;
+        out[3] = (getMaxTileY() + 1) * getTileSize() - 1;
+    }
+
+    @Override
+    public SequentialIterator createSequentialIterator(int worldX, int worldY,
+                                                       int w, int h,
+                                                       boolean writable, ScanOrder order) {
+        int tileSize = getTileSize();
+        int viewMinX = minTx * tileSize;
+        int viewMinY = minTy * tileSize;
+        int viewMaxX = (getMaxTileX() + 1) * tileSize;
+        int viewMaxY = (getMaxTileY() + 1) * tileSize;
+
+        int x0 = Math.max(worldX, viewMinX);
+        int y0 = Math.max(worldY, viewMinY);
+        int x1 = Math.min(worldX + w, viewMaxX);
+        int y1 = Math.min(worldY + h, viewMaxY);
+        if (x0 >= x1 || y0 >= y1) {
+            return new EmptySequentialIterator();
+        }
+        return canvas.createSequentialIterator(x0, y0, x1 - x0, y1 - y0, writable, order);
+    }
+
+    @Override
+    public SequentialIterator createSequentialIterator(int worldX, int worldY,
+                                                       int w, int h,
+                                                       boolean writable) {
+        return createSequentialIterator(worldX, worldY, w, h, writable, ScanOrder.ROW_MAJOR);
+    }
+
+    @Override
+    public RandomAccessIterator createRandomAccessIterator(boolean writable) {
+        return new ViewRandomAccessIterator(writable);
+    }
+
+    @Override
+    public void readTiles(Consumer<Map<Long, float[]>> consumer) {
+        Map<Long, float[]> snapshot = new HashMap<>();
+        for (int ty = minTy; ty <= getMaxTileY(); ty++) {
+            for (int tx = minTx; tx <= getMaxTileX(); tx++) {
+                Tile tile = canvas.getTile(tx, ty);
+                if (tile != null) {
+                    snapshot.put(TiledCanvas.pack(tx, ty), tile.getPixelsSnapshot());
+                }
+            }
+        }
+        consumer.accept(Collections.unmodifiableMap(snapshot));
+    }
+
+    @Override
+    public void writeTiles(Map<Long, float[]> newTiles) {
+        // 过滤出视图范围内的瓦片键，其余忽略
+        Map<Long, float[]> filtered = new HashMap<>();
+        for (Map.Entry<Long, float[]> entry : newTiles.entrySet()) {
+            long key = entry.getKey();
+            int tx = TiledCanvas.unpackTx(key);
+            int ty = TiledCanvas.unpackTy(key);
+            if (tx >= minTx && tx <= getMaxTileX() && ty >= minTy && ty <= getMaxTileY()) {
+                filtered.put(key, entry.getValue());
+            }
+        }
+        if (!filtered.isEmpty()) {
+            canvas.writeTiles(filtered);   // 委托给底层画布（TiledCanvas）
+        }
+    }
+
+    // ───────── 视图感知的随机访问迭代器 ─────────
+    private class ViewRandomAccessIterator implements RandomAccessIterator {
+        private final RandomAccessIterator delegate;
+        private final int minX, minY, maxX, maxY; // 视图像素范围
+
+        ViewRandomAccessIterator(boolean writable) {
+            int tileSize = getTileSize();
+            this.minX = minTx * tileSize;
+            this.minY = minTy * tileSize;
+            this.maxX = (getMaxTileX() + 1) * tileSize - 1;
+            this.maxY = (getMaxTileY() + 1) * tileSize - 1;
+            this.delegate = canvas.createRandomAccessIterator(writable);
+        }
+
+        @Override
+        public void moveTo(int x, int y) {
+            delegate.moveTo(x, y);
+        }
+
+        @Override
+        public void getPixel(float[] out) {
+            int x = delegate.x();
+            int y = delegate.y();
+            if (x < minX || x > maxX || y < minY || y > maxY) {
+                Arrays.fill(out, 0f);
+                return;
+            }
+            delegate.getPixel(out);
+        }
+
+        @Override
+        public void setPixel(float r, float g, float b, float a) {
+            int x = delegate.x();
+            int y = delegate.y();
+            if (x < minX || x > maxX || y < minY || y > maxY) {
+                return;
+            }
+            delegate.setPixel(r, g, b, a);
+        }
+
+        @Override
+        public int x() {
+            return delegate.x();
+        }
+
+        @Override
+        public int y() {
+            return delegate.y();
+        }
+
+        @Override
+        public boolean isWritable() {
+            return delegate.isWritable();
+        }
+    }
+
+    // 空顺序迭代器
+    private static class EmptySequentialIterator implements SequentialIterator {
+
+        @Override
+        public boolean next() {
+            return false;
+        }
+
+        @Override
+        public void getPixel(float[] out) {
+
+        }
+
+        @Override
+        public void setPixel(float r, float g, float b, float a) {
+
+        }
+
+        @Override
+        public int x() {
+            return 0;
+        }
+
+        @Override
+        public int y() {
+            return 0;
+        }
+
+        @Override
+        public void reset() {
+
+        }
+    }
 }

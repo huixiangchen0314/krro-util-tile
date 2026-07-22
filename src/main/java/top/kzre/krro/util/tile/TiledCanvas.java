@@ -3,6 +3,7 @@ package top.kzre.krro.util.tile;
 import lombok.Getter;
 import top.kzre.krro.util.pool.FloatsPools;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,7 +19,7 @@ import java.util.function.Consumer;
  * <p>
  * 撤销/重做功能由上层（Clojure）实现，本类不提供任何历史记录。
  */
-public final class TiledCanvas {
+public final class TiledCanvas implements Canvas{
 
     // ========== 瓦片坐标工具（私有静态） ==========
     public static long pack(int tx, int ty) {
@@ -54,20 +55,22 @@ public final class TiledCanvas {
 
     // ---------- 字段 ----------
     @Getter
-    final int tileSize;
+    private final int tileSize;
+
     private final ConcurrentHashMap<Long, Tile> tiles;
+
     // 特殊暴露，外部不该直接修改
     @Getter
     private final float[] defaultPixel;
     // ---------- 范围查询 ----------
     @Getter
-    private volatile int minTx;
+    private volatile int minTileX;
     @Getter
-    private volatile int maxTx;
+    private volatile int maxTileX;
     @Getter
-    private volatile int minTy;
+    private volatile int minTileY;
     @Getter
-    private volatile int maxTy;
+    private volatile int maxTileY;
 
     // ---------- 构造器 ----------
     public TiledCanvas(int tileSize) {
@@ -82,10 +85,10 @@ public final class TiledCanvas {
         this.tileSize = tileSize;
         this.tiles = new ConcurrentHashMap<>();
         this.defaultPixel = defaultPixel.clone();
-        this.minTx = Integer.MAX_VALUE;
-        this.maxTx = Integer.MIN_VALUE;
-        this.minTy = Integer.MAX_VALUE;
-        this.maxTy = Integer.MIN_VALUE;
+        this.minTileX = Integer.MAX_VALUE;
+        this.maxTileX = Integer.MIN_VALUE;
+        this.minTileY = Integer.MAX_VALUE;
+        this.maxTileY = Integer.MIN_VALUE;
     }
 
 
@@ -97,6 +100,7 @@ public final class TiledCanvas {
      * @param ty 瓦片 Y 索引（支持负数）
      * @return 瓦片句柄，若瓦片不存在则返回 null
      */
+    @Override
     public Tile getTile(int tx, int ty) {
         return tiles.get(pack(tx, ty));
     }
@@ -110,6 +114,7 @@ public final class TiledCanvas {
      *
      * @param visitor 回调函数，接受 (tx, ty, data)
      */
+    @Override
     public void forEachTile(TileVisitor visitor) {
         for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
             long key = entry.getKey();
@@ -155,11 +160,13 @@ public final class TiledCanvas {
         }
     }
 
+    @Override
     public int tileCount() {
         return this.tiles.size();
     }
 
     // ---------- 公开的像素读写 ----------
+    @Override
     public void getPixel(int x, int y, float[] out) {
         if (out == null || out.length < CHANNELS)
             throw new IllegalArgumentException("out array must have length >= 4");
@@ -175,6 +182,7 @@ public final class TiledCanvas {
         tile.getPixel(lx, ly, out, tileSize);
     }
 
+    @Override
     public void setPixel(int x, int y, float r, float g, float b, float a) {
         int tx = tileX(x, tileSize);
         int ty = tileY(y, tileSize);
@@ -185,6 +193,7 @@ public final class TiledCanvas {
     }
 
     // ---------- 批量读写 ----------
+    @Override
     public void readBytes(float[] dest, int destOffset, int x, int y, int w, int h, int destRowStride) {
         if (dest == null) throw new IllegalArgumentException("dest cannot be null");
         if (w <= 0 || h <= 0) return;
@@ -230,6 +239,7 @@ public final class TiledCanvas {
         }
     }
 
+    @Override
     public void writeBytes(float[] src, int srcOffset, int x, int y, int w, int h, int srcRowStride) {
         if (src == null) throw new IllegalArgumentException("src cannot be null");
         if (w <= 0 || h <= 0) return;
@@ -262,6 +272,7 @@ public final class TiledCanvas {
     }
 
     // ---------- 填充 ----------
+    @Override
     public void fillRect(int x, int y, int w, int h, float[] color) {
         if (color == null || color.length < CHANNELS)
             throw new IllegalArgumentException("color must be a float[4]");
@@ -330,16 +341,17 @@ public final class TiledCanvas {
     }
 
     // ---------- 清空 ----------
+    @Override
     public void clear() {
         for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
             entry.getValue().getDataRef().release();
         }
         tiles.clear();
         synchronized (this) {
-            minTx = Integer.MAX_VALUE;
-            maxTx = Integer.MIN_VALUE;
-            minTy = Integer.MAX_VALUE;
-            maxTy = Integer.MIN_VALUE;
+            minTileX = Integer.MAX_VALUE;
+            maxTileX = Integer.MIN_VALUE;
+            minTileY = Integer.MAX_VALUE;
+            maxTileY = Integer.MIN_VALUE;
         }
     }
 
@@ -358,10 +370,10 @@ public final class TiledCanvas {
         }
         // 同步读取当前范围（保证一致性）
         synchronized (this) {
-            copy.minTx = this.minTx;
-            copy.maxTx = this.maxTx;
-            copy.minTy = this.minTy;
-            copy.maxTy = this.maxTy;
+            copy.minTileX = this.minTileX;
+            copy.maxTileX = this.maxTileX;
+            copy.minTileY = this.minTileY;
+            copy.maxTileY = this.maxTileY;
         }
         return copy;
     }
@@ -389,13 +401,14 @@ public final class TiledCanvas {
 
         // 更新范围（直接读取 src 的 volatile 字段，然后同步更新 this）
         synchronized (this) {
-            this.minTx = src.minTx;
-            this.maxTx = src.maxTx;
-            this.minTy = src.minTy;
-            this.maxTy = src.maxTy;
+            this.minTileX = src.minTileX;
+            this.maxTileX = src.maxTileX;
+            this.minTileY = src.minTileY;
+            this.maxTileY = src.maxTileY;
         }
     }
 
+    @Override
     public void getBounds(int[] out) {
         if (out == null || out.length < 4)
             throw new IllegalArgumentException("out array must have length >= 4");
@@ -403,15 +416,17 @@ public final class TiledCanvas {
             out[0] = out[1] = out[2] = out[3] = 0;
             return;
         }
-        out[0] = minTx * tileSize;
-        out[1] = minTy * tileSize;
-        out[2] = (maxTx + 1) * tileSize - 1;
-        out[3] = (maxTy + 1) * tileSize - 1;
+        out[0] = minTileX * tileSize;
+        out[1] = minTileY * tileSize;
+        out[2] = (maxTileX + 1) * tileSize - 1;
+        out[3] = (maxTileY + 1) * tileSize - 1;
     }
+
 
     public int totalSize() { return tiles.size(); }
 
-    // ---------- 迭代器工厂 ----------
+
+    @Override
     public SequentialIterator createSequentialIterator(int x, int y, int w, int h,
                                                        boolean writable,
                                                        ScanOrder order) {
@@ -419,6 +434,7 @@ public final class TiledCanvas {
         return new SeqIteratorImpl(this, x, y, w, h, writable, order);
     }
 
+    @Override
     public SequentialIterator createSequentialIterator(int x, int y, int w, int h,
                                                        boolean writable) {
         return createSequentialIterator(x, y, w, h, writable, ScanOrder.ROW_MAJOR);
@@ -428,19 +444,9 @@ public final class TiledCanvas {
      * 创建随机访问迭代器。
      * @param writable 是否可写
      */
+    @Override
     public RandomAccessIterator createRandomAccessIterator(boolean writable) {
         return new RandomAccessIteratorImpl(this, writable);
-    }
-
-    /**
-     * 创建画布视图。
-     * @param x 左上角 X（世界坐标）
-     * @param y 左上角 Y
-     * @param w 宽度
-     * @param h 高度
-     */
-    public CanvasView createView(int x, int y, int w, int h) {
-        return new CanvasViewImpl(this, x, y, w, h);
     }
 
 
@@ -471,18 +477,18 @@ public final class TiledCanvas {
     }
 
     private  void updateExtent(int tx, int ty) {
-        if (tx < minTx) minTx = tx;
-        if (tx > maxTx) maxTx = tx;
-        if (ty < minTy) minTy = ty;
-        if (ty > maxTy) maxTy = ty;
+        if (tx < minTileX) minTileX = tx;
+        if (tx > maxTileX) maxTileX = tx;
+        if (ty < minTileY) minTileY = ty;
+        if (ty > maxTileY) maxTileY = ty;
     }
 
     private void recomputeExtent() {
         if (tiles.isEmpty()) {
-            minTx = Integer.MAX_VALUE;
-            maxTx = Integer.MIN_VALUE;
-            minTy = Integer.MAX_VALUE;
-            maxTy = Integer.MIN_VALUE;
+            minTileX = Integer.MAX_VALUE;
+            maxTileX = Integer.MIN_VALUE;
+            minTileY = Integer.MAX_VALUE;
+            maxTileY = Integer.MIN_VALUE;
             return;
         }
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
@@ -495,10 +501,10 @@ public final class TiledCanvas {
             if (ty < minY) minY = ty;
             if (ty > maxY) maxY = ty;
         }
-        minTx = minX;
-        maxTx = maxX;
-        minTy = minY;
-        maxTy = maxY;
+        minTileX = minX;
+        maxTileX = maxX;
+        minTileY = minY;
+        maxTileY = maxY;
     }
 
     /**
@@ -513,6 +519,7 @@ public final class TiledCanvas {
      *
      * @param consumer 接收瓦片映射的回调，键为 pack(tx, ty)，值为瓦片像素数组（只读）
      */
+    @Override
     public void readTiles(Consumer<Map<Long, float[]>> consumer) {
         Map<Long, float[]> snapshot = new HashMap<>();
         for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
@@ -521,6 +528,10 @@ public final class TiledCanvas {
         consumer.accept(Collections.unmodifiableMap(snapshot));
     }
 
+    @Override
+    public void writeTiles(Map<Long, float[]> newTiles) {
+        mergeTiles(newTiles);   // 复用已有的零拷贝合并方法
+    }
 
     /**
      * 合并瓦片数据（零拷贝）。
@@ -602,5 +613,14 @@ public final class TiledCanvas {
 
         }
         return this;
+    }
+
+    public void deleteTiles(Collection<Long> keys) {
+        for (Long key : keys) {
+            Tile removed = tiles.remove(key);
+            if(removed != null) {
+                removed.getDataRef().release();
+            }
+        }
     }
 }
