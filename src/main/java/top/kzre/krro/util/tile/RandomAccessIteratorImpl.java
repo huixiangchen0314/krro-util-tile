@@ -26,12 +26,19 @@ final class RandomAccessIteratorImpl implements RandomAccessIterator {
         canvas.getPixel(curX, curY, out);
     }
 
+    // 通用数组版写像素
     @Override
-    public void setPixel(float r, float g, float b, float a) {
+    public void setPixel(float[] pixel) {
         if (!writable) throw new UnsupportedOperationException("Read-only iterator");
         if (!hasCurrent) throw new IllegalStateException("No current position");
-        // 通过画布直接写入，确保使用最新的瓦片数据（自动处理 COW 和缺失瓦片）
-        canvas.setPixel(curX, curY, r, g, b, a);
+        canvas.setPixel(curX, curY, pixel);   // TiledCanvas 已支持 setPixel(x, y, float[])
+    }
+
+    // 四参数版本委托给数组版（标记为废弃以推荐使用数组版）
+    @Override
+    @Deprecated
+    public void setPixel(float r, float g, float b, float a) {
+        setPixel(new float[]{r, g, b, a});
     }
 
     @Override

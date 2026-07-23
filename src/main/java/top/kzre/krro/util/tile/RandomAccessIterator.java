@@ -29,7 +29,14 @@ public interface RandomAccessIterator {
      * @throws UnsupportedOperationException 如果迭代器为只读模式
      * @throws IllegalStateException 如果尚未调用 moveTo 或当前位置无效
      */
+    @Deprecated
     void setPixel(float r, float g, float b, float a);
+
+    /**
+     * 写入当前像素（数组版本），通道数由创建该迭代器的画布决定。
+     * @param pixel 像素数组，长度必须与画布通道数一致
+     */
+    void setPixel(float[] pixel);
 
     /**
      * 获取当前像素的 X 坐标。

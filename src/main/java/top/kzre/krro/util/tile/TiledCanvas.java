@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * <p>
  * 撤销/重做功能由上层（Clojure）实现，本类不提供任何历史记录。
  */
-public final class TiledCanvas implements Canvas{
+public final class TiledCanvas implements Canvas {
 
     // ========== 瓦片坐标工具（私有静态） ==========
     public static long pack(int tx, int ty) {
@@ -50,13 +50,11 @@ public final class TiledCanvas implements Canvas{
         return Math.floorMod(worldY, tileSize);
     }
 
-    // ---------- 常量 ----------
-    public static final int CHANNELS = 4;
-
     // ---------- 字段 ----------
     @Getter
     private final int tileSize;
-
+    @Getter
+    private final int channels;          // 实例变量，final，默认 4
     private final ConcurrentHashMap<Long, Tile> tiles;
 
     // 特殊暴露，外部不该直接修改
@@ -74,15 +72,23 @@ public final class TiledCanvas implements Canvas{
 
     // ---------- 构造器 ----------
     public TiledCanvas(int tileSize) {
-        this(tileSize, new float[]{0f, 0f, 0f, 0f});
+        this(tileSize, new float[]{0f, 0f, 0f, 0f}, 4);
     }
 
     public TiledCanvas(int tileSize, float[] defaultPixel) {
+        this(tileSize, defaultPixel, 4);   // 默认 4 通道
+    }
+
+    // 完整构造器
+    public TiledCanvas(int tileSize, float[] defaultPixel, int channels) {
         if (tileSize <= 0) throw new IllegalArgumentException("tileSize must be positive");
-        if (defaultPixel == null || defaultPixel.length < CHANNELS)
-            throw new IllegalArgumentException("defaultPixel must be a float[4]");
+        if (channels < 1 || channels > 10)  // 根据实际需要限定范围
+            throw new IllegalArgumentException("channels must be between 1 and 10");
+        if (defaultPixel == null || defaultPixel.length < channels)
+            throw new IllegalArgumentException("defaultPixel must have length >= " + channels);
 
         this.tileSize = tileSize;
+        this.channels = channels;
         this.tiles = new ConcurrentHashMap<>();
         this.defaultPixel = defaultPixel.clone();
         this.minTileX = Integer.MAX_VALUE;
@@ -90,7 +96,6 @@ public final class TiledCanvas implements Canvas{
         this.minTileY = Integer.MAX_VALUE;
         this.maxTileY = Integer.MIN_VALUE;
     }
-
 
     /**
      * 获取指定瓦片的句柄。返回的 Tile 对象仅用于读取像素数据（通过 {@link Tile#getPixelsSnapshot()}），
@@ -168,28 +173,35 @@ public final class TiledCanvas implements Canvas{
     // ---------- 公开的像素读写 ----------
     @Override
     public void getPixel(int x, int y, float[] out) {
-        if (out == null || out.length < CHANNELS)
+        if (out == null || out.length < channels)
             throw new IllegalArgumentException("out array must have length >= 4");
         int tx = tileX(x, tileSize);
         int ty = tileY(y, tileSize);
         Tile tile = getTile(tx, ty);
         if (tile == null) {
-            System.arraycopy(defaultPixel, 0, out, 0, CHANNELS);
+            System.arraycopy(defaultPixel, 0, out, 0, channels);
             return;
         }
         int lx = localX(x, tileSize);
         int ly = localY(y, tileSize);
-        tile.getPixel(lx, ly, out, tileSize);
+        tile.getPixel(lx, ly, out, tileSize, channels);
+    }
+
+    @Deprecated
+    @Override
+    public void setPixel(int worldX, int worldY, float r, float g, float b, float a) {
+        setPixel(worldX, worldY, new float[]{r, g, b, a});
     }
 
     @Override
-    public void setPixel(int x, int y, float r, float g, float b, float a) {
+    public void setPixel(int x, int y, float[] pixel) {
+        if (pixel.length < channels) throw new IllegalArgumentException("pixel array too short");
         int tx = tileX(x, tileSize);
         int ty = tileY(y, tileSize);
         Tile tile = ensureTile(tx, ty);
         int lx = localX(x, tileSize);
         int ly = localY(y, tileSize);
-        tile.setPixel(lx, ly, r, g, b, a, tileSize);
+        tile.setPixel(lx, ly, pixel, tileSize, channels);   // tile.setPixel 也需支持数组
     }
 
     // ---------- 批量读写 ----------
@@ -209,9 +221,9 @@ public final class TiledCanvas implements Canvas{
                 if (tile == null) {
                     int destRowBase = destOffset + row * destRowStride + col;
                     for (int r = 0; r < rowsInTile; r++) {
-                        int rowStart = (destRowBase + r * destRowStride) * CHANNELS;
+                        int rowStart = (destRowBase + r * destRowStride) * channels;
                         for (int c = 0; c < w - col; c++) {
-                            int idx = rowStart + c * CHANNELS;
+                            int idx = rowStart + c * channels;
                             dest[idx] = defaultPixel[0];
                             dest[idx+1] = defaultPixel[1];
                             dest[idx+2] = defaultPixel[2];
@@ -222,15 +234,15 @@ public final class TiledCanvas implements Canvas{
                     float[] tileData = tile.getPixelsSnapshot();
                     int localX0 = localX(x + col, tileSize);
                     int localY0 = localY(y + row, tileSize);
-                    int tileRowStride = tileSize * CHANNELS;
-                    int srcOffset = (localY0 * tileSize + localX0) * CHANNELS;
+                    int tileRowStride = tileSize * channels;
+                    int srcOffset = (localY0 * tileSize + localX0) * channels;
                     int copyCols = Math.min(tileSize - localX0, w - col);
-                    int bytesPerRow = copyCols * CHANNELS;
+                    int bytesPerRow = copyCols * channels;
 
                     for (int r = 0; r < rowsInTile; r++) {
                         int destRowStart = destOffset + (row + r) * destRowStride + col;
                         System.arraycopy(tileData, srcOffset + r * tileRowStride,
-                                dest, destRowStart * CHANNELS, bytesPerRow);
+                                dest, destRowStart * channels, bytesPerRow);
                     }
                 }
                 col += Math.min(tileSize - localX(x + col, tileSize), w - col);
@@ -255,14 +267,14 @@ public final class TiledCanvas implements Canvas{
                 float[] tileData = tile.getPixelsForWrite(tileSize);
                 int localX0 = localX(x + col, tileSize);
                 int localY0 = localY(y + row, tileSize);
-                int tileRowStride = tileSize * CHANNELS;
-                int dstOffset = (localY0 * tileSize + localX0) * CHANNELS;
+                int tileRowStride = tileSize * channels;
+                int dstOffset = (localY0 * tileSize + localX0) * channels;
                 int copyCols = Math.min(tileSize - localX0, w - col);
-                int bytesPerRow = copyCols * CHANNELS;
+                int bytesPerRow = copyCols * channels;
 
                 for (int r = 0; r < rowsInTile; r++) {
                     int srcRowStart = srcOffset + (row + r) * srcRowStride + col;
-                    System.arraycopy(src, srcRowStart * CHANNELS,
+                    System.arraycopy(src, srcRowStart * channels,
                             tileData, dstOffset + r * tileRowStride, bytesPerRow);
                 }
                 col += copyCols;
@@ -274,7 +286,7 @@ public final class TiledCanvas implements Canvas{
     // ---------- 填充 ----------
     @Override
     public void fillRect(int x, int y, int w, int h, float[] color) {
-        if (color == null || color.length < CHANNELS)
+        if (color == null || color.length < channels)
             throw new IllegalArgumentException("color must be a float[4]");
         if (w <= 0 || h <= 0) return;
 
@@ -320,13 +332,13 @@ public final class TiledCanvas implements Canvas{
                     Tile tile = ensureTile(tx, ty);
                     float[] tileData = tile.getPixelsForWrite(tileSize);
                     int copyCols = Math.min(tileSize - localX0, w - col);
-                    int tileRowStride = tileSize * CHANNELS;
-                    int dstOffset = (localY0 * tileSize + localX0) * CHANNELS;
+                    int tileRowStride = tileSize * channels;
+                    int dstOffset = (localY0 * tileSize + localX0) * channels;
 
                     for (int r = 0; r < rowsInTile; r++) {
                         int rowStart = dstOffset + r * tileRowStride;
                         for (int c = 0; c < copyCols; c++) {
-                            int idx = rowStart + c * CHANNELS;
+                            int idx = rowStart + c * channels;
                             tileData[idx] = color[0];
                             tileData[idx+1] = color[1];
                             tileData[idx+2] = color[2];
@@ -452,13 +464,13 @@ public final class TiledCanvas implements Canvas{
 
     // ---------- 内部辅助 ----------
     private float[] allocateTile() {
-        int len = tileSize * tileSize * CHANNELS;
+        int len = tileSize * tileSize * channels;
         return FloatsPools.getPool(len).acquire();
     }
 
     private void fillTileWithDefault(float[] tile) {
         int len = tile.length;
-        for (int i = 0; i < len; i += CHANNELS) {
+        for (int i = 0; i < len; i += channels) {
             tile[i] = defaultPixel[0];
             tile[i+1] = defaultPixel[1];
             tile[i+2] = defaultPixel[2];
@@ -468,7 +480,7 @@ public final class TiledCanvas implements Canvas{
 
     private void fillTileWithColor(float[] tile, float[] color) {
         int len = tile.length;
-        for (int i = 0; i < len; i += CHANNELS) {
+        for (int i = 0; i < len; i += channels) {
             tile[i] = color[0];
             tile[i+1] = color[1];
             tile[i+2] = color[2];
@@ -538,7 +550,7 @@ public final class TiledCanvas implements Canvas{
      * <p>
      * 直接使用传入的像素数组，<b>不进行复制</b>。调用者必须满足：
      * <ul>
-     *   <li>数组长度必须为 {@code tileSize * tileSize * CHANNELS}</li>
+     *   <li>数组长度必须为 {@code tileSize * tileSize * channels}</li>
      *   <li>数组必须是从 {@link top.kzre.krro.util.pool.FloatsPools} 获取的，
      *       且调用者<b>转移所有权</b>给本画布，之后不得再修改或释放该数组</li>
      *   <li>若数组不符合池化要求（例如是普通 {@code new float[]}），
@@ -551,7 +563,7 @@ public final class TiledCanvas implements Canvas{
      * @throws IllegalArgumentException 如果任意数组长度不匹配
      */
     public TiledCanvas mergeTiles(Map<Long, float[]> newTiles) {
-        int expectedLen = tileSize * tileSize * CHANNELS;
+        int expectedLen = tileSize * tileSize * channels;
         for (Map.Entry<Long, float[]> entry : newTiles.entrySet()) {
             long key = entry.getKey();
             float[] src = entry.getValue();

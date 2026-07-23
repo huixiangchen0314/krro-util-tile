@@ -11,10 +11,11 @@ public  final class SeqIteratorImpl implements SequentialIterator {
     private float[] curTileData;
     private int tileOffset;
     private boolean hasCurrent;
-
+    private final int channels;
     SeqIteratorImpl(TiledCanvas canvas, int x, int y, int w, int h,
                     boolean writable, ScanOrder order) {
         this.canvas = canvas;
+        this.channels = canvas.getChannels();
         this.startX = x;
         this.startY = y;
         this.endX = x + w - 1;
@@ -48,7 +49,7 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         if (curTileData != null) {
             int lx = TiledCanvas.localX(curX, canvas.getTileSize());
             int ly = TiledCanvas.localY(curY, canvas.getTileSize());
-            tileOffset = (ly * canvas.getTileSize() + lx) * TiledCanvas.CHANNELS;
+            tileOffset = (ly * canvas.getTileSize() + lx) * channels;
         }
         return true;
     }
@@ -124,7 +125,7 @@ public  final class SeqIteratorImpl implements SequentialIterator {
             out[2] = curTileData[tileOffset + 2];
             out[3] = curTileData[tileOffset + 3];
         } else {
-            System.arraycopy(canvas.getDefaultPixel(), 0, out, 0, TiledCanvas.CHANNELS);
+            System.arraycopy(canvas.getDefaultPixel(), 0, out, 0, channels);
         }
     }
 
@@ -140,7 +141,7 @@ public  final class SeqIteratorImpl implements SequentialIterator {
             curTileData = currentTile.getPixelsForWrite(canvas.getTileSize());
             int lx = TiledCanvas.localX(curX, canvas.getTileSize());
             int ly = TiledCanvas.localY(curY, canvas.getTileSize());
-            tileOffset = (ly * canvas.getTileSize() + lx) * TiledCanvas.CHANNELS;
+            tileOffset = (ly * canvas.getTileSize() + lx) * channels;
         }
         curTileData[tileOffset] = r;
         curTileData[tileOffset + 1] = g;

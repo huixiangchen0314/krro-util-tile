@@ -28,7 +28,10 @@ final class CanvasView implements Canvas {
     }
 
     // ───────── Canvas 接口实现 ─────────
-
+    @Override
+    public int getChannels() {
+        return canvas.getChannels();
+    }
     @Override
     public int getTileSize() {
         return canvas.getTileSize();
@@ -106,15 +109,22 @@ final class CanvasView implements Canvas {
         canvas.getPixel(worldX, worldY, out);
     }
 
+    @Deprecated
     @Override
     public void setPixel(int worldX, int worldY, float r, float g, float b, float a) {
+        setPixel(worldX, worldY, new float[]{r, g, b, a});
+    }
+
+    // 通用数组版像素写入（带视图裁剪）
+    @Override
+    public void setPixel(int worldX, int worldY, float[] pixel) {
         int tileSize = getTileSize();
         int tx = TiledCanvas.tileX(worldX, tileSize);
         int ty = TiledCanvas.tileY(worldY, tileSize);
         if (tx < minTx || tx > getMaxTileX() || ty < minTy || ty > getMaxTileY()) {
-            return;
+            return;   // 视图外直接忽略
         }
-        canvas.setPixel(worldX, worldY, r, g, b, a);
+        canvas.setPixel(worldX, worldY, pixel);
     }
 
     @Override
@@ -135,7 +145,7 @@ final class CanvasView implements Canvas {
         int offsetX = x0 - worldX;
         int offsetY = y0 - worldY;
         int stride = (destRowStride <= 0) ? w : destRowStride;
-        int adjustedOffset = destOffset + (offsetY * stride + offsetX) * TiledCanvas.CHANNELS;
+        int adjustedOffset = destOffset + (offsetY * stride + offsetX) * getChannels();
 
         canvas.readBytes(dest, adjustedOffset, x0, y0, x1 - x0, y1 - y0, stride);
     }
@@ -158,7 +168,7 @@ final class CanvasView implements Canvas {
         int offsetX = x0 - worldX;
         int offsetY = y0 - worldY;
         int stride = (srcRowStride <= 0) ? w : srcRowStride;
-        int adjustedOffset = srcOffset + (offsetY * stride + offsetX) * TiledCanvas.CHANNELS;
+        int adjustedOffset = srcOffset + (offsetY * stride + offsetX) * getChannels();
 
         canvas.writeBytes(src, adjustedOffset, x0, y0, x1 - x0, y1 - y0, stride);
     }
@@ -291,13 +301,20 @@ final class CanvasView implements Canvas {
         }
 
         @Override
+        @Deprecated
         public void setPixel(float r, float g, float b, float a) {
+            setPixel(new float[]{r, g, b, a});
+        }
+
+        // 通用数组版本，增加视图裁剪
+        @Override
+        public void setPixel(float[] pixel) {
             int x = delegate.x();
             int y = delegate.y();
             if (x < minX || x > maxX || y < minY || y > maxY) {
-                return;
+                return;   // 视图外忽略
             }
-            delegate.setPixel(r, g, b, a);
+            delegate.setPixel(pixel);
         }
 
         @Override
