@@ -16,7 +16,7 @@ final class CanvasView implements Canvas {
     private final int tileW;    // 视图宽度（瓦片数）
     private final int tileH;    // 视图高度（瓦片数）
 
-    CanvasView(TiledCanvas canvas, int minTx, int minTy, int tileW, int tileH) {
+    CanvasView(Canvas  canvas, int minTx, int minTy, int tileW, int tileH) {
         if (tileW <= 0 || tileH <= 0) {
             throw new IllegalArgumentException("Tile width and height must be positive");
         }
@@ -268,6 +268,60 @@ final class CanvasView implements Canvas {
         if (!filtered.isEmpty()) {
             canvas.writeTiles(filtered);   // 委托给底层画布（TiledCanvas）
         }
+    }
+
+    @Override
+    public Canvas subCanvas(int x, int y, int w, int h) {
+        int tileSize = getTileSize();
+        int viewMinX = minTx * tileSize;
+        int viewMinY = minTy * tileSize;
+        int viewMaxX = (getMaxTileX() + 1) * tileSize - 1;
+        int viewMaxY = (getMaxTileY() + 1) * tileSize - 1;
+
+        // 裁剪到当前视图范围内
+        int x0 = Math.max(x, viewMinX);
+        int y0 = Math.max(y, viewMinY);
+        int x1 = Math.min(x + w - 1, viewMaxX);
+        int y1 = Math.min(y + h - 1, viewMaxY);
+        if (x0 > x1 || y0 > y1) {
+            // 调用者保证区域重叠，否则抛出异常。
+            throw new IllegalArgumentException("Requested sub-region is outside the view");
+        }
+
+        int minTxNew = TiledCanvas.tileX(x0, tileSize);
+        int minTyNew = TiledCanvas.tileY(y0, tileSize);
+        int maxTxNew = TiledCanvas.tileX(x1, tileSize);
+        int maxTyNew = TiledCanvas.tileY(y1, tileSize);
+        int tileWNew = maxTxNew - minTxNew + 1;
+        int tileHNew = maxTyNew - minTyNew + 1;
+
+        return new CanvasView(canvas, minTxNew, minTyNew, tileWNew, tileHNew);
+    }
+
+    @Override
+    public List<Canvas> split(int tileSpan) {
+        if (tileSpan <= 0) throw new IllegalArgumentException("tileSpan must be positive");
+        List<Canvas> tiles = new ArrayList<>();
+        int ts = getTileSize();
+        int minTx = getMinTileX();
+        int maxTx = getMaxTileX();
+        int minTy = getMinTileY();
+        int maxTy = getMaxTileY();
+        if (minTx > maxTx || minTy > maxTy) return tiles;
+
+        for (int ty = minTy; ty <= maxTy; ty += tileSpan) {
+            int curH = Math.min(tileSpan, maxTy - ty + 1);
+            for (int tx = minTx; tx <= maxTx; tx += tileSpan) {
+                int curW = Math.min(tileSpan, maxTx - tx + 1);
+                tiles.add(subCanvas(tx * ts, ty * ts, curW * ts, curH * ts));
+            }
+        }
+        return tiles;
+    }
+
+    @Override
+    public List<Canvas> split() {
+        return split(1);
     }
 
     // ───────── 视图感知的随机访问迭代器 ─────────

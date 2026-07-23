@@ -1,5 +1,7 @@
 package top.kzre.krro.util.tile;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -109,4 +111,32 @@ public interface Canvas {
         }
         // 若画布无法表示 Alpha，则静默忽略
     }
+
+
+    /**
+     * 创建一个子画布视图，限制到指定的像素矩形区域。
+     * 所有读写操作将被限制在该区域内，区域外的操作会被忽略或返回默认像素。
+     * 该视图与底层画布共享同一份像素存储，修改会直接反映到原画布。
+     *
+     * @param x 左上角像素坐标（世界坐标）
+     * @param y 左上角像素坐标
+     * @param w 宽度（像素）
+     * @param h 高度（像素）
+     * @return 一个实现 Canvas 接口的视图，其坐标相对于原画布
+     */
+    Canvas subCanvas(int x, int y, int w, int h);
+
+
+    /**
+     * 按瓦片跨度切分画布为子视图（抽象方法，由各实现类提供高效实现）。
+     * @param tileSpan 每个子视图包含的瓦片数量（沿 X 和 Y 方向）
+     * @return 子视图列表
+     */
+    List<Canvas> split(int tileSpan);
+
+    /**
+     * 按单个瓦片切分画布（每个子视图恰好为一个瓦片）。
+     * 等价于 {@code splitByTiles(1)}。
+     */
+    List<Canvas> split();
 }

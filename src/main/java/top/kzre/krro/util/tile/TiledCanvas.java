@@ -3,10 +3,7 @@ package top.kzre.krro.util.tile;
 import lombok.Getter;
 import top.kzre.krro.util.pool.FloatsPools;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -635,4 +632,43 @@ public final class TiledCanvas implements Canvas {
             }
         }
     }
+
+    @Override
+    public Canvas subCanvas(int x, int y, int w, int h) {
+        // 将像素矩形转换为瓦片矩形（对齐瓦片边界）
+        int minTx = tileX(x, tileSize);
+        int minTy = tileY(y, tileSize);
+        int maxTx = tileX(x + w - 1, tileSize);
+        int maxTy = tileY(y + h - 1, tileSize);
+        int tileW = maxTx - minTx + 1;
+        int tileH = maxTy - minTy + 1;
+        return new CanvasView(this, minTx, minTy, tileW, tileH);
+    }
+
+    @Override
+    public List<Canvas> split(int tileSpan) {
+        if (tileSpan <= 0) throw new IllegalArgumentException("tileSpan must be positive");
+        List<Canvas> tiles = new ArrayList<>();
+        int ts = this.tileSize;          // 直接字段
+        int minTx = this.minTileX;       // volatile，但仅读一次
+        int maxTx = this.maxTileX;
+        int minTy = this.minTileY;
+        int maxTy = this.maxTileY;
+        if (minTx > maxTx || minTy > maxTy) return tiles;
+
+        for (int ty = minTy; ty <= maxTy; ty += tileSpan) {
+            int curH = Math.min(tileSpan, maxTy - ty + 1);
+            for (int tx = minTx; tx <= maxTx; tx += tileSpan) {
+                int curW = Math.min(tileSpan, maxTx - tx + 1);
+                tiles.add(subCanvas(tx * ts, ty * ts, curW * ts, curH * ts));
+            }
+        }
+        return tiles;
+    }
+
+    @Override
+    public List<Canvas> split() {
+        return split(1);
+    }
+
 }
