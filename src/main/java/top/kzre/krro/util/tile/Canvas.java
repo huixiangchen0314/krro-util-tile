@@ -84,4 +84,29 @@ public interface Canvas {
     default void setGray(int x, int y, float gray) {
         setPixel(x, y, new float[]{gray});
     }
+
+    /** 获取指定像素的 Alpha 值（不透明程度）。 */
+    default float getOpacity(int x, int y) {
+        int c = getChannels();
+        // 若画布包含 Alpha 通道（最后一个通道），直接读取
+        if (c >= 2) {
+            float[] pixel = new float[c];
+            getPixel(x, y, pixel);
+            return pixel[c - 1];
+        }
+        // 没有 Alpha 通道则视为完全不透明
+        return 1.0f;
+    }
+
+    /** 设置指定像素的 Alpha 值，其他颜色通道保持不变。 */
+    default void setOpacity(int x, int y, float alpha) {
+        int c = getChannels();
+        if (c >= 2) {
+            float[] pixel = new float[c];
+            getPixel(x, y, pixel);          // 先读取原有颜色
+            pixel[c - 1] = alpha;           // 仅替换 Alpha
+            setPixel(x, y, pixel);
+        }
+        // 若画布无法表示 Alpha，则静默忽略
+    }
 }
