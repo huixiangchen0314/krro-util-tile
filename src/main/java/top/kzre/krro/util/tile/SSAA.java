@@ -11,22 +11,20 @@ final class SSAA extends AntiAlias {
     }
 
     @Override
-    public void write(Canvas canvas, double x, double y, float[] color, CoveragePredicate predicate) {
+    public void read(float[] dst, Canvas canvas, double x, double y, float[] color, CoveragePredicate predicate) {
         int ix = (int) Math.floor(x);
         int iy = (int) Math.floor(y);
         int channels = canvas.getChannels();
         FloatsPool pool = FloatsPools.getPool(channels);
         float[] original = pool.acquire();
-        float[] blended = pool.acquire();
+
         try {
             canvas.getPixel(ix, iy, original);
             float coverage = computeCoverage(x, y, canvas, predicate);
             for (int c = 0; c < channels; c++) {
-                blended[c] = original[c] + (color[c] - original[c]) * coverage;
+                dst[c] = original[c] + (color[c] - original[c]) * coverage;
             }
-            canvas.setPixel(ix, iy, blended);
         } finally {
-            pool.release(blended);
             pool.release(original);
         }
     }

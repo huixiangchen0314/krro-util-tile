@@ -11,10 +11,11 @@ final class TileData {
 
     private CacheLevel level;
 
-
     private final int size;
 
     private float[] pixels;
+
+    // TODO 全局池优化
     private ByteBuffer directBuffer;
 
     TileData(float[] pixels) {
@@ -99,4 +100,6 @@ final class TileData {
             level = CacheLevel.HEAP;
         }
     }
+
+
 }

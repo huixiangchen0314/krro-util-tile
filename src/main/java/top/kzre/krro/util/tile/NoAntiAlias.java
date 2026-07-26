@@ -5,9 +5,8 @@ package top.kzre.krro.util.tile;
     private NoAntiAlias() {}
 
     @Override
-    public void write(Canvas canvas, double x, double y, float[] color, CoveragePredicate predicate) {
-        int ix = (int) Math.floor(x);
-        int iy = (int) Math.floor(y);
-        canvas.setPixel(ix, iy, color);
+    public void read(float[] dst, Canvas canvas, double x, double y, float[] color, CoveragePredicate predicate) {
+        int channels = canvas.getChannels();
+        if (channels >= 0) System.arraycopy(color, 0, dst, 0, channels);
     }
 }

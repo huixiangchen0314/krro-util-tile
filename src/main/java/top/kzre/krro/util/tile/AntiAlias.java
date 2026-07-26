@@ -5,6 +5,7 @@ package top.kzre.krro.util.tile;
  */
 
 public abstract class AntiAlias {
+
     /**
      * 覆盖谓词，用于亚像素抗锯齿精度填充判断.
      */
@@ -17,10 +18,16 @@ public abstract class AntiAlias {
         return AlwaysTrue.INSTANCE;
     }
 
-    public abstract void write(Canvas canvas, double x, double y, float[] color, CoveragePredicate predicate);
+    public abstract void read(float[] dst, Canvas canvas, double x, double y, float[] color, CoveragePredicate predicate);
 
-    public void write(Canvas canvas, double x, double y, float[] color){
-        write(canvas, x, y, color, alwaysTrue());
+    public void read(float[] dst, Canvas canvas, double x, double y, float[] color){
+        read(dst, canvas, x, y, color, alwaysTrue());
+    }
+
+    public float[] read(double x, double y, Canvas canvas, float[] color){
+        float[] dst = new float[canvas.getChannels()];
+        read(dst, canvas, x, y, color);
+        return dst;
     }
 
 
@@ -32,8 +39,12 @@ public abstract class AntiAlias {
         return new SSAA(scale);
     }
 
+    private static final class SSAA2x2Holder {
+        static final AntiAlias SSAA2x2 = new SSAA(2);
+    }
+
     public static AntiAlias ssaa2x2(){
-        return new SSAA(2);
+        return SSAA2x2Holder.SSAA2x2;
     }
 
     private static final class AlwaysTrue implements CoveragePredicate {

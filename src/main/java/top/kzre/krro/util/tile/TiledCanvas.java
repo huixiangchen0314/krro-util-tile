@@ -162,6 +162,28 @@ public final class TiledCanvas implements Canvas {
         }
     }
 
+    public void deleteTile(Long key){
+        Tile removed = tiles.remove(key);
+        if (removed != null) {
+            removed.getDataRef().release();
+            synchronized (this) {
+                recomputeExtent();
+            }
+        }
+    }
+
+    public void deleteTiles(Iterable<Long> keys){
+        if(keys == null) {
+            return;
+        }
+        for (Long key : keys) {
+            Tile removed = tiles.remove(key);
+            if (removed != null) {
+                removed.getDataRef().release();
+            }
+        }
+    }
+
     @Override
     public int tileCount() {
         return this.tiles.size();
