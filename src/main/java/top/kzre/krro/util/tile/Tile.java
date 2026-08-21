@@ -74,7 +74,7 @@ public final class Tile {
         return data.getPixels();
     }
 
-    public synchronized float[] getPixelsForWrite(int tileSize) {
+    public synchronized float[] getPixelsForWrite() {
         ensureWritable();
         return data.getPixels();
     }

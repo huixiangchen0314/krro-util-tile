@@ -107,6 +107,12 @@ public final class TiledCanvas implements Canvas {
         return tiles.get(pack(tx, ty));
     }
 
+
+    @Override
+    public Set<Long> getTiles() {
+        return tiles.keySet();
+    }
+
     /**
      * 遍历所有存在的瓦片，对每个瓦片调用回调函数。
      * 回调函数接收三个参数：瓦片索引 tx、ty 以及只读的像素数据数组。
@@ -128,7 +134,8 @@ public final class TiledCanvas implements Canvas {
     }
 
     // ---------- 包内可见的瓦片访问 ----------
-    Tile ensureTile(int tx, int ty) {
+    @Override
+    public Tile ensureTile(int tx, int ty) {
         long key = pack(tx, ty);
         Tile tile = tiles.get(key);
         if (tile == null) {
@@ -283,7 +290,7 @@ public final class TiledCanvas implements Canvas {
             for (int col = 0; col < w; ) {
                 int tx = tileX(x + col, tileSize);
                 Tile tile = ensureTile(tx, ty);
-                float[] tileData = tile.getPixelsForWrite(tileSize);
+                float[] tileData = tile.getPixelsForWrite();
                 int localX0 = localX(x + col, tileSize);
                 int localY0 = localY(y + row, tileSize);
                 int tileRowStride = tileSize * channels;
@@ -349,7 +356,7 @@ public final class TiledCanvas implements Canvas {
                 } else {
                     // 部分覆盖：获取可写瓦片，逐像素填充
                     Tile tile = ensureTile(tx, ty);
-                    float[] tileData = tile.getPixelsForWrite(tileSize);
+                    float[] tileData = tile.getPixelsForWrite();
                     int copyCols = Math.min(tileSize - localX0, w - col);
                     int tileRowStride = tileSize * channels;
                     int dstOffset = (localY0 * tileSize + localX0) * channels;

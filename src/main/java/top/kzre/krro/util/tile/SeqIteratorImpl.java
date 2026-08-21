@@ -36,7 +36,7 @@ public  final class SeqIteratorImpl implements SequentialIterator {
 
         if (writable) {
             currentTile = canvas.ensureTile(tx, ty);
-            curTileData = currentTile.getPixelsForWrite(canvas.getTileSize());
+            curTileData = currentTile.getPixelsForWrite();
         } else {
             currentTile = canvas.getTile(tx, ty);
             if (currentTile != null) {
@@ -138,7 +138,7 @@ public  final class SeqIteratorImpl implements SequentialIterator {
             int tx = TiledCanvas.tileX(curX, canvas.getTileSize());
             int ty = TiledCanvas.tileY(curY, canvas.getTileSize());
             currentTile = canvas.ensureTile(tx, ty);
-            curTileData = currentTile.getPixelsForWrite(canvas.getTileSize());
+            curTileData = currentTile.getPixelsForWrite();
             int lx = TiledCanvas.localX(curX, canvas.getTileSize());
             int ly = TiledCanvas.localY(curY, canvas.getTileSize());
             tileOffset = (ly * canvas.getTileSize() + lx) * channels;

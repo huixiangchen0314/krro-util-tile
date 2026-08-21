@@ -2,6 +2,7 @@ package top.kzre.krro.util.tile;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public interface Canvas {
@@ -14,7 +15,12 @@ public interface Canvas {
     float[] getDefaultPixel();
     Tile getTile(int tx, int ty);
 
+    Set<Long> getTiles();
+
     void forEachTile(TileVisitor visitor);
+
+    // ---------- 包内可见的瓦片访问 ----------
+    Tile ensureTile(int tx, int ty);
 
     int tileCount();
 

@@ -71,6 +71,18 @@ final class CanvasView implements Canvas {
     }
 
     @Override
+    public Set<Long> getTiles() {
+        Set<Long> keys = new HashSet<>();
+        for (int ty = minTy; ty <= getMaxTileY(); ty++) {
+            for (int tx = minTx; tx <= getMaxTileX(); tx++) {
+                if (canvas.getTile(tx, ty) != null) {
+                    keys.add(TiledCanvas.pack(tx, ty));
+                }
+            }
+        }
+        return keys;
+    }
+    @Override
     public void forEachTile(TileVisitor visitor) {
         for (int ty = minTy; ty <= getMaxTileY(); ty++) {
             for (int tx = minTx; tx <= getMaxTileX(); tx++) {
@@ -81,6 +93,11 @@ final class CanvasView implements Canvas {
                 }
             }
         }
+    }
+
+    @Override
+    public Tile ensureTile(int tx, int ty) {
+        return canvas.ensureTile(tx, ty);
     }
 
     @Override
