@@ -68,6 +68,24 @@ final class TileData {
         return refCount.get();
     }
 
+
+    /**
+     * 原子地尝试增加引用计数，仅当当前计数 > 0 时才增加。
+     * 用于安全地获取共享瓦片数据，避免引用已释放的对象。
+     *
+     * @return 若成功则返回新的引用计数（>0），若无效（已释放）则返回 0。
+     */
+    public int acquireIfValid() {
+        int current;
+        do {
+            current = refCount.get();
+            if (current <= 0) {
+                return 0;   // 已释放，无效
+            }
+        } while (!refCount.compareAndSet(current, current + 1));
+        return current + 1;
+    }
+
     TileData cloneData() {
         ensureHeap();
         float[] newPixels = FloatsPools.getPool(size).acquire();

@@ -426,13 +426,12 @@ public final class TiledCanvas implements Canvas {
      * 将另一个画布的数据共享到当前画布（引用计数增加，轻量级快照）。
      * 当前画布的原有数据会被释放。
      */
-    public void shareFrom(TiledCanvas src) {
+    public synchronized void shareFrom(TiledCanvas src) {
         checkReadonly();
-
         if (src.tileSize != this.tileSize)
             throw new IllegalArgumentException("tileSize mismatch");
 
-        // 清除当前所有瓦片（释放引用）
+        // 释放当前所有瓦片
         clear();
 
         // 复制源画布的瓦片引用
@@ -440,18 +439,22 @@ public final class TiledCanvas implements Canvas {
             long key = entry.getKey();
             Tile srcTile = entry.getValue();
             TileData data = srcTile.getDataRef();
-            data.acquire(); // 增加引用计数
+
+            // 尝试增加引用计数（原子操作）
+            int newCount = data.acquireIfValid();
+            if (newCount == 0) {
+                throw new IllegalStateException("TileData already released during shareFrom");
+            }
+
             Tile newTile = new Tile(srcTile.tx(), srcTile.ty(), data);
             tiles.put(key, newTile);
         }
 
-        // 更新范围（直接读取 src 的 volatile 字段，然后同步更新 this）
-        synchronized (this) {
-            this.minTileX = src.minTileX;
-            this.maxTileX = src.maxTileX;
-            this.minTileY = src.minTileY;
-            this.maxTileY = src.maxTileY;
-        }
+        // 更新范围（在此同步块内安全）
+        this.minTileX = src.minTileX;
+        this.maxTileX = src.maxTileX;
+        this.minTileY = src.minTileY;
+        this.maxTileY = src.maxTileY;
     }
 
     @Override
