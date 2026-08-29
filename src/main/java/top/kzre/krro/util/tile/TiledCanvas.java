@@ -393,27 +393,11 @@ public final class TiledCanvas implements Canvas {
         }
     }
 
-    // ---------- 复制 ----------
-    public TiledCanvas copy() {
-        TiledCanvas copy = new TiledCanvas(this.tileSize, this.defaultPixel);
-        for (Map.Entry<Long, Tile> entry : this.tiles.entrySet()) {
-            long key = entry.getKey();
-            Tile srcTile = entry.getValue();
-            float[] srcPixels = srcTile.getPixelsSnapshot();
-            float[] dstPixels = copy.allocateTile();
-            System.arraycopy(srcPixels, 0, dstPixels, 0, srcPixels.length);
-            TileData data = new TileData(dstPixels);
-            Tile dstTile = new Tile(srcTile.tx(), srcTile.ty(), data);
-            copy.tiles.put(key, dstTile);
-        }
-        // 同步读取当前范围（保证一致性）
-        synchronized (this) {
-            copy.minTileX = this.minTileX;
-            copy.maxTileX = this.maxTileX;
-            copy.minTileY = this.minTileY;
-            copy.maxTileY = this.maxTileY;
-        }
-        return copy;
+    // COW 拷贝，不提供深拷贝
+    public TiledCanvas copy(){
+        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel);
+        cloned.shareFrom(this);
+        return cloned;
     }
 
     /**
@@ -699,5 +683,6 @@ public final class TiledCanvas implements Canvas {
     public List<Canvas> split() {
         return split(1);
     }
+
 
 }

@@ -36,6 +36,9 @@ final class TileData {
 
     int release() {
         int remaining = refCount.decrementAndGet();
+        if(remaining < 0){
+            throw new IllegalStateException("Tile was already released!");
+        }
         if (remaining == 0) {
             dispose();
         }
