@@ -1,6 +1,7 @@
 package top.kzre.krro.util.tile;
 
 import lombok.Getter;
+import lombok.Setter;
 import top.kzre.krro.util.pool.FloatsPools;
 
 import java.util.*;
@@ -66,6 +67,9 @@ public final class TiledCanvas implements Canvas {
     private volatile int minTileY;
     @Getter
     private volatile int maxTileY;
+    @Getter
+    @Setter
+    private volatile boolean readonly = false;
 
     // ---------- 构造器 ----------
     public TiledCanvas(int tileSize) {
@@ -136,6 +140,8 @@ public final class TiledCanvas implements Canvas {
     // ---------- 包内可见的瓦片访问 ----------
     @Override
     public Tile ensureTile(int tx, int ty) {
+        checkReadonly();
+
         long key = pack(tx, ty);
         Tile tile = tiles.get(key);
         if (tile == null) {
@@ -159,6 +165,8 @@ public final class TiledCanvas implements Canvas {
     }
 
     void deleteTile(int tx, int ty) {
+        checkReadonly();
+
         long key = pack(tx, ty);
         Tile removed = tiles.remove(key);
         if (removed != null) {
@@ -170,6 +178,8 @@ public final class TiledCanvas implements Canvas {
     }
 
     public void deleteTile(Long key){
+        checkReadonly();
+
         Tile removed = tiles.remove(key);
         if (removed != null) {
             removed.getDataRef().release();
@@ -180,6 +190,8 @@ public final class TiledCanvas implements Canvas {
     }
 
     public void deleteTiles(Iterable<Long> keys){
+        checkReadonly();
+
         if(keys == null) {
             return;
         }
@@ -216,11 +228,15 @@ public final class TiledCanvas implements Canvas {
     @Deprecated
     @Override
     public void setPixel(int worldX, int worldY, float r, float g, float b, float a) {
+        checkReadonly();
+
         setPixel(worldX, worldY, new float[]{r, g, b, a});
     }
 
     @Override
     public void setPixel(int x, int y, float[] pixel) {
+        checkReadonly();
+
         if (pixel.length < channels) throw new IllegalArgumentException("pixel array too short");
         int tx = tileX(x, tileSize);
         int ty = tileY(y, tileSize);
@@ -279,6 +295,8 @@ public final class TiledCanvas implements Canvas {
 
     @Override
     public void writeBytes(float[] src, int srcOffset, int x, int y, int w, int h, int srcRowStride) {
+        checkReadonly();
+
         if (src == null) throw new IllegalArgumentException("src cannot be null");
         if (w <= 0 || h <= 0) return;
         if (srcRowStride <= 0) srcRowStride = w;
@@ -312,6 +330,8 @@ public final class TiledCanvas implements Canvas {
     // ---------- 填充 ----------
     @Override
     public void fillRect(int x, int y, int w, int h, float[] color) {
+        checkReadonly();
+
         if (color == null || color.length < channels)
             throw new IllegalArgumentException("color must be a float[4]");
         if (w <= 0 || h <= 0) return;
@@ -381,6 +401,8 @@ public final class TiledCanvas implements Canvas {
     // ---------- 清空 ----------
     @Override
     public void clear() {
+        checkReadonly();
+
         for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
             entry.getValue().getDataRef().release();
         }
@@ -405,6 +427,8 @@ public final class TiledCanvas implements Canvas {
      * 当前画布的原有数据会被释放。
      */
     public void shareFrom(TiledCanvas src) {
+        checkReadonly();
+
         if (src.tileSize != this.tileSize)
             throw new IllegalArgumentException("tileSize mismatch");
 
@@ -552,6 +576,8 @@ public final class TiledCanvas implements Canvas {
 
     @Override
     public void writeTiles(Map<Long, float[]> newTiles) {
+        checkReadonly();
+
         mergeTiles(newTiles);   // 复用已有的零拷贝合并方法
     }
 
@@ -573,6 +599,8 @@ public final class TiledCanvas implements Canvas {
      * @throws IllegalArgumentException 如果任意数组长度不匹配
      */
     public TiledCanvas mergeTiles(Map<Long, float[]> newTiles) {
+        checkReadonly();
+
         int expectedLen = tileSize * tileSize * channels;
         for (Map.Entry<Long, float[]> entry : newTiles.entrySet()) {
             long key = entry.getKey();
@@ -609,6 +637,8 @@ public final class TiledCanvas implements Canvas {
      * @throws IllegalArgumentException 如果 tileSize 不匹配
      */
     public TiledCanvas mergeCanvas(TiledCanvas canvas) {
+        checkReadonly();
+
         if (canvas.tileSize != this.tileSize) {
             throw new IllegalArgumentException("tileSize mismatch");
         }
@@ -638,6 +668,8 @@ public final class TiledCanvas implements Canvas {
     }
 
     public void deleteTiles(Collection<Long> keys) {
+        checkReadonly();
+
         for (Long key : keys) {
             Tile removed = tiles.remove(key);
             if(removed != null) {
@@ -684,5 +716,9 @@ public final class TiledCanvas implements Canvas {
         return split(1);
     }
 
-
+    private void checkReadonly() {
+        if (readonly) {
+            throw new UnsupportedOperationException("Canvas is read-only");
+        }
+    }
 }
