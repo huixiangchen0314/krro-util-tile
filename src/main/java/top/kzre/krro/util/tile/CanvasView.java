@@ -117,8 +117,8 @@ final class CanvasView implements Canvas {
     @Override
     public void getPixel(int worldX, int worldY, float[] out) {
         int tileSize = getTileSize();
-        int tx = TiledCanvas.tileX(worldX, tileSize);
-        int ty = TiledCanvas.tileY(worldY, tileSize);
+        int tx = TiledCanvas.tile(worldX, tileSize);
+        int ty = TiledCanvas.tile(worldY, tileSize);
         if (tx < minTx || tx > getMaxTileX() || ty < minTy || ty > getMaxTileY()) {
             Arrays.fill(out, 0f);
             return;
@@ -136,8 +136,8 @@ final class CanvasView implements Canvas {
     @Override
     public void setPixel(int worldX, int worldY, float[] pixel) {
         int tileSize = getTileSize();
-        int tx = TiledCanvas.tileX(worldX, tileSize);
-        int ty = TiledCanvas.tileY(worldY, tileSize);
+        int tx = TiledCanvas.tile(worldX, tileSize);
+        int ty = TiledCanvas.tile(worldY, tileSize);
         if (tx < minTx || tx > getMaxTileX() || ty < minTy || ty > getMaxTileY()) {
             return;   // 视图外直接忽略
         }
@@ -305,10 +305,10 @@ final class CanvasView implements Canvas {
             throw new IllegalArgumentException("Requested sub-region is outside the view");
         }
 
-        int minTxNew = TiledCanvas.tileX(x0, tileSize);
-        int minTyNew = TiledCanvas.tileY(y0, tileSize);
-        int maxTxNew = TiledCanvas.tileX(x1, tileSize);
-        int maxTyNew = TiledCanvas.tileY(y1, tileSize);
+        int minTxNew = TiledCanvas.tile(x0, tileSize);
+        int minTyNew = TiledCanvas.tile(y0, tileSize);
+        int maxTxNew = TiledCanvas.tile(x1, tileSize);
+        int maxTyNew = TiledCanvas.tile(y1, tileSize);
         int tileWNew = maxTxNew - minTxNew + 1;
         int tileHNew = maxTyNew - minTyNew + 1;
 

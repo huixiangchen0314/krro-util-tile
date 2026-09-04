@@ -9,6 +9,7 @@ import java.util.Set;
 public final class CanvasUtils {
     private CanvasUtils() {}
 
+
     /**
      * 对 Canvas 进行双线性插值采样，结果存入 out。
      * 临时数组可复用，避免重复分配。
@@ -75,7 +76,7 @@ public final class CanvasUtils {
         }
         float clipLeft = x;
         float clipRight = x + width;
-        float clipTop = y;          // 假设 y 轴向下
+        float clipTop = y;          // y 轴向下
         float clipBottom = y + height;
 
         Set<Long> result = new HashSet<>();

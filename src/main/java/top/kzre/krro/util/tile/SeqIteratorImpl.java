@@ -31,8 +31,8 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         if (curX < startX || curX > endX || curY < startY || curY > endY) {
             return false;
         }
-        int tx = TiledCanvas.tileX(curX, canvas.getTileSize());
-        int ty = TiledCanvas.tileY(curY, canvas.getTileSize());
+        int tx = TiledCanvas.tile(curX, canvas.getTileSize());
+        int ty = TiledCanvas.tile(curY, canvas.getTileSize());
 
         if (writable) {
             currentTile = canvas.ensureTile(tx, ty);
@@ -47,8 +47,8 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         }
 
         if (curTileData != null) {
-            int lx = TiledCanvas.localX(curX, canvas.getTileSize());
-            int ly = TiledCanvas.localY(curY, canvas.getTileSize());
+            int lx = TiledCanvas.local(curX, canvas.getTileSize());
+            int ly = TiledCanvas.local(curY, canvas.getTileSize());
             tileOffset = (ly * canvas.getTileSize() + lx) * channels;
         }
         return true;
@@ -135,12 +135,12 @@ public  final class SeqIteratorImpl implements SequentialIterator {
         if (!hasCurrent) throw new IllegalStateException("Iterator exhausted or not started");
 
         if (curTileData == null) {
-            int tx = TiledCanvas.tileX(curX, canvas.getTileSize());
-            int ty = TiledCanvas.tileY(curY, canvas.getTileSize());
+            int tx = TiledCanvas.tile(curX, canvas.getTileSize());
+            int ty = TiledCanvas.tile(curY, canvas.getTileSize());
             currentTile = canvas.ensureTile(tx, ty);
             curTileData = currentTile.getPixelsForWrite();
-            int lx = TiledCanvas.localX(curX, canvas.getTileSize());
-            int ly = TiledCanvas.localY(curY, canvas.getTileSize());
+            int lx = TiledCanvas.local(curX, canvas.getTileSize());
+            int ly = TiledCanvas.local(curY, canvas.getTileSize());
             tileOffset = (ly * canvas.getTileSize() + lx) * channels;
         }
         curTileData[tileOffset] = r;

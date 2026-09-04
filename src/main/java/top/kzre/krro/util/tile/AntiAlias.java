@@ -3,7 +3,7 @@ package top.kzre.krro.util.tile;
 /**
  * 抗锯齿读取接口
  */
-
+@Deprecated
 public abstract class AntiAlias {
 
     /**

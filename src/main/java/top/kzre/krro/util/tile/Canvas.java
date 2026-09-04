@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
+@Deprecated
 public interface Canvas {
     int getTileSize();
     int getChannels();

@@ -19,7 +19,6 @@ import java.util.function.Consumer;
  */
 public final class TiledCanvas implements Canvas {
 
-    // ========== 瓦片坐标工具（私有静态） ==========
     public static long pack(int tx, int ty) {
         return ((long) tx << 32) | (ty & 0xFFFFFFFFL);
     }
@@ -32,18 +31,30 @@ public final class TiledCanvas implements Canvas {
         return (int) key;
     }
 
+    public static int tile(int worldX, int tileSize) {
+        return Math.floorMod(worldX, tileSize);
+    }
+
+    public static int local(int worldY, int tileSize) {
+        return Math.floorMod(worldY, tileSize);
+    }
+
+    @Deprecated
     public static int tileX(int worldX, int tileSize) {
         return Math.floorDiv(worldX, tileSize);
     }
 
+    @Deprecated
     public static int tileY(int worldY, int tileSize) {
         return Math.floorDiv(worldY, tileSize);
     }
 
+    @Deprecated
     public static int localX(int worldX, int tileSize) {
         return Math.floorMod(worldX, tileSize);
     }
 
+    @Deprecated
     public static int localY(int worldY, int tileSize) {
         return Math.floorMod(worldY, tileSize);
     }
@@ -213,15 +224,15 @@ public final class TiledCanvas implements Canvas {
     public void getPixel(int x, int y, float[] out) {
         if (out == null || out.length < channels)
             throw new IllegalArgumentException("out array must have length >= 4");
-        int tx = tileX(x, tileSize);
-        int ty = tileY(y, tileSize);
+        int tx = tile(x, tileSize);
+        int ty = tile(y, tileSize);
         Tile tile = getTile(tx, ty);
         if (tile == null) {
             System.arraycopy(defaultPixel, 0, out, 0, channels);
             return;
         }
-        int lx = localX(x, tileSize);
-        int ly = localY(y, tileSize);
+        int lx = local(x, tileSize);
+        int ly = local(y, tileSize);
         tile.getPixel(lx, ly, out, tileSize, channels);
     }
 
@@ -238,11 +249,11 @@ public final class TiledCanvas implements Canvas {
         checkReadonly();
 
         if (pixel.length < channels) throw new IllegalArgumentException("pixel array too short");
-        int tx = tileX(x, tileSize);
-        int ty = tileY(y, tileSize);
+        int tx = tile(x, tileSize);
+        int ty = tile(y, tileSize);
         Tile tile = ensureTile(tx, ty);
-        int lx = localX(x, tileSize);
-        int ly = localY(y, tileSize);
+        int lx = local(x, tileSize);
+        int ly = local(y, tileSize);
         tile.setPixel(lx, ly, pixel, tileSize, channels);   // tile.setPixel 也需支持数组
     }
 
@@ -254,11 +265,11 @@ public final class TiledCanvas implements Canvas {
         if (destRowStride <= 0) destRowStride = w;
 
         for (int row = 0; row < h; ) {
-            int ty = tileY(y + row, tileSize);
-            int rowsInTile = Math.min(tileSize - localY(y + row, tileSize), h - row);
+            int ty = tile(y + row, tileSize);
+            int rowsInTile = Math.min(tileSize - local(y + row, tileSize), h - row);
 
             for (int col = 0; col < w; ) {
-                int tx = tileX(x + col, tileSize);
+                int tx = tile(x + col, tileSize);
                 Tile tile = getTile(tx, ty);
                 if (tile == null) {
                     int destRowBase = destOffset + row * destRowStride + col;
@@ -274,8 +285,8 @@ public final class TiledCanvas implements Canvas {
                     }
                 } else {
                     float[] tileData = tile.getPixelsSnapshot();
-                    int localX0 = localX(x + col, tileSize);
-                    int localY0 = localY(y + row, tileSize);
+                    int localX0 = local(x + col, tileSize);
+                    int localY0 = local(y + row, tileSize);
                     int tileRowStride = tileSize * channels;
                     int srcOffset = (localY0 * tileSize + localX0) * channels;
                     int copyCols = Math.min(tileSize - localX0, w - col);
@@ -287,7 +298,7 @@ public final class TiledCanvas implements Canvas {
                                 dest, destRowStart * channels, bytesPerRow);
                     }
                 }
-                col += Math.min(tileSize - localX(x + col, tileSize), w - col);
+                col += Math.min(tileSize - local(x + col, tileSize), w - col);
             }
             row += rowsInTile;
         }
@@ -302,15 +313,15 @@ public final class TiledCanvas implements Canvas {
         if (srcRowStride <= 0) srcRowStride = w;
 
         for (int row = 0; row < h; ) {
-            int ty = tileY(y + row, tileSize);
-            int rowsInTile = Math.min(tileSize - localY(y + row, tileSize), h - row);
+            int ty = tile(y + row, tileSize);
+            int rowsInTile = Math.min(tileSize - local(y + row, tileSize), h - row);
 
             for (int col = 0; col < w; ) {
-                int tx = tileX(x + col, tileSize);
+                int tx = tile(x + col, tileSize);
                 Tile tile = ensureTile(tx, ty);
                 float[] tileData = tile.getPixelsForWrite();
-                int localX0 = localX(x + col, tileSize);
-                int localY0 = localY(y + row, tileSize);
+                int localX0 = local(x + col, tileSize);
+                int localY0 = local(y + row, tileSize);
                 int tileRowStride = tileSize * channels;
                 int dstOffset = (localY0 * tileSize + localX0) * channels;
                 int copyCols = Math.min(tileSize - localX0, w - col);
@@ -341,13 +352,13 @@ public final class TiledCanvas implements Canvas {
                 color[2] == defaultPixel[2] && color[3] == defaultPixel[3]);
 
         for (int row = 0; row < h; ) {
-            int ty = tileY(y + row, tileSize);
-            int rowsInTile = Math.min(tileSize - localY(y + row, tileSize), h - row);
+            int ty = tile(y + row, tileSize);
+            int rowsInTile = Math.min(tileSize - local(y + row, tileSize), h - row);
 
             for (int col = 0; col < w; ) {
-                int tx = tileX(x + col, tileSize);
-                int localX0 = localX(x + col, tileSize);
-                int localY0 = localY(y + row, tileSize);
+                int tx = tile(x + col, tileSize);
+                int localX0 = local(x + col, tileSize);
+                int localY0 = local(y + row, tileSize);
 
                 // 如果填充区域完整覆盖一个瓦片
                 if (localX0 == 0 && localY0 == 0 && rowsInTile == tileSize &&
@@ -402,6 +413,8 @@ public final class TiledCanvas implements Canvas {
     @Override
     public void clear() {
         checkReadonly();
+
+        if (tiles == null || tiles.isEmpty()) return;
 
         for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
             entry.getValue().getDataRef().release();
@@ -684,10 +697,10 @@ public final class TiledCanvas implements Canvas {
     @Override
     public Canvas subCanvas(int x, int y, int w, int h) {
         // 将像素矩形转换为瓦片矩形（对齐瓦片边界）
-        int minTx = tileX(x, tileSize);
-        int minTy = tileY(y, tileSize);
-        int maxTx = tileX(x + w - 1, tileSize);
-        int maxTy = tileY(y + h - 1, tileSize);
+        int minTx = tile(x, tileSize);
+        int minTy = tile(y, tileSize);
+        int maxTx = tile(x + w - 1, tileSize);
+        int maxTy = tile(y + h - 1, tileSize);
         int tileW = maxTx - minTx + 1;
         int tileH = maxTy - minTy + 1;
         return new CanvasView(this, minTx, minTy, tileW, tileH);
