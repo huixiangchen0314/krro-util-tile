@@ -32,7 +32,7 @@ public final class TiledCanvas implements Canvas {
     }
 
     public static int tile(int worldX, int tileSize) {
-        return Math.floorMod(worldX, tileSize);
+        return Math.floorDiv(worldX, tileSize);
     }
 
     public static int local(int worldY, int tileSize) {
