@@ -39,6 +39,13 @@ public final class TiledCanvas implements Canvas {
         return Math.floorMod(worldY, tileSize);
     }
 
+    public static int localOffset(int worldX, int worldY, int tileSize, int channels) {
+        int localX = local(worldY, tileSize);
+        int localY = local(worldX, tileSize);
+
+        return (localY * tileSize + localX)  * channels;
+    }
+
     @Deprecated
     public static int tileX(int worldX, int tileSize) {
         return Math.floorDiv(worldX, tileSize);
