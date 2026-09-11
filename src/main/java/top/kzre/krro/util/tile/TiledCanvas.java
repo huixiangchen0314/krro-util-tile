@@ -165,15 +165,14 @@ public final class TiledCanvas implements Canvas {
         if (tile == null) {
             float[] raw = allocateTile();
             fillTileWithDefault(raw);
-            TileData data = new TileData(raw);
-            Tile newTile = new Tile(tx, ty, data);
+            HeapTileData data = new HeapTileData(raw);
+            Tile newTile = new DefaultTile(tx, ty, data);
             Tile existing = tiles.putIfAbsent(key, newTile);
             if (existing != null) {
                 data.release();
                 return existing;
             }
             // 注册到全局管理器
-            TileStorageManager.instance().register(data);
             synchronized (this) {
                 updateExtent(tx, ty);
             }
@@ -379,8 +378,8 @@ public final class TiledCanvas implements Canvas {
                         deleteTile(tx, ty);
                         float[] raw = allocateTile();
                         fillTileWithColor(raw, color);
-                        TileData data = new TileData(raw);
-                        Tile newTile = new Tile(tx, ty, data);
+                        HeapTileData data = new HeapTileData(raw);
+                        Tile newTile = new DefaultTile(tx, ty, data);
                         Tile existing = tiles.putIfAbsent(pack(tx, ty), newTile);
                         if (existing != null) {
                             data.release();
@@ -466,7 +465,7 @@ public final class TiledCanvas implements Canvas {
                 throw new IllegalStateException("TileData already released during shareFrom");
             }
 
-            Tile newTile = new Tile(srcTile.tx(), srcTile.ty(), data);
+            Tile newTile = new DefaultTile(srcTile.tx(), srcTile.ty(), data);
             tiles.put(key, newTile);
         }
 
@@ -634,13 +633,13 @@ public final class TiledCanvas implements Canvas {
                         "Pixel array length mismatch: expected " + expectedLen + ", got " + src.length);
             }
 
-            TileData newData = new TileData(src);    // 直接使用外部数组，引用计数 = 1
+            TileData newData = new HeapTileData(src);    // 直接使用外部数组，引用计数 = 1
 
             Tile existingTile = tiles.get(key);
             if (existingTile != null) {
                 existingTile.replaceData(newData);   // 内部管理引用计数
             } else {
-                Tile newTile = new Tile(unpackTx(key), unpackTy(key), newData);
+                Tile newTile = new DefaultTile(unpackTx(key), unpackTy(key), newData);
                 tiles.put(key, newTile);
             }
 
@@ -677,9 +676,9 @@ public final class TiledCanvas implements Canvas {
                 // 释放目标画布原有的瓦片数据
                 existingTile.getDataRef().release();
                 // 直接替换为新的 Tile（使用同一个 TileData）
-                this.tiles.put(key, new Tile(unpackTx(key), unpackTy(key), srcData));
+                this.tiles.put(key, new DefaultTile(unpackTx(key), unpackTy(key), srcData));
             } else {
-                this.tiles.put(key, new Tile(unpackTx(key), unpackTy(key), srcData));
+                this.tiles.put(key, new DefaultTile(unpackTx(key), unpackTy(key), srcData));
                 // 仅在新添加瓦片时更新范围
                 synchronized (this) {
                     updateExtent(unpackTx(key), unpackTy(key));

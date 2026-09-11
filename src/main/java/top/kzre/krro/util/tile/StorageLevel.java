@@ -7,26 +7,26 @@ import java.util.WeakHashMap;
 
 abstract class StorageLevel {
     // 记录每个 HEAP TileData 的注册时间戳（nanoTime），用于 FIFO 淘汰
-    private final WeakHashMap<TileData, Long> registry = new WeakHashMap<>();
+    private final WeakHashMap<DefaultTileData, Long> registry = new WeakHashMap<>();
 
     @Setter protected int maxTiles = 2048;
     @Setter protected long maxMemoryBytes = 256L * 1024 * 1024;
 
     /** 注册一个 HEAP 瓦片 */
-    public synchronized void register(TileData data) {
+    public synchronized void register(DefaultTileData data) {
         if (data.getLevel() != CacheLevel.HEAP) return;
         registry.putIfAbsent(data, System.nanoTime());
     }
 
     /** 移除瓦片记录（由 TileData.dispose 调用） */
-    public synchronized void remove(TileData data) {
+    public synchronized void remove(DefaultTileData data) {
         registry.remove(data);
     }
 
     /** 当前 HEAP 内存占用（字节） */
     public synchronized long totalMemory() {
         long total = 0;
-        for (TileData data : registry.keySet()) {
+        for (DefaultTileData data : registry.keySet()) {
             if (data.getLevel() == CacheLevel.HEAP) {
                 total += data.getByteSize();
             }
@@ -38,9 +38,9 @@ abstract class StorageLevel {
     public synchronized void evictIfNeeded() {
         while (registry.size() > maxTiles || totalMemory() > maxMemoryBytes) {
             // 找出注册时间最早的（值最小）的 TileData
-            TileData oldest = null;
+            DefaultTileData oldest = null;
             long oldestTime = Long.MAX_VALUE;
-            for (Map.Entry<TileData, Long> entry : registry.entrySet()) {
+            for (Map.Entry<DefaultTileData, Long> entry : registry.entrySet()) {
                 if (entry.getValue() < oldestTime) {
                     oldestTime = entry.getValue();
                     oldest = entry.getKey();
@@ -64,5 +64,5 @@ abstract class StorageLevel {
     }
 
     /** 子类实现具体降级策略 */
-    protected abstract boolean demote(TileData data);
+    protected abstract boolean demote(DefaultTileData data);
 }

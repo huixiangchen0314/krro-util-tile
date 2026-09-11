@@ -26,7 +26,7 @@ class TileStorageManager {
 
     private final StorageLevel heapLevel = new StorageLevel() {
         @Override
-        protected boolean demote(TileData data) {
+        protected boolean demote(DefaultTileData data) {
             return data.demoteToDirect();
         }
     };
@@ -43,12 +43,12 @@ class TileStorageManager {
     }
 
     /** 注册一个 HEAP 瓦片（由 TiledCanvas 在 ensureTile 后调用） */
-    public void register(TileData data) {
+    public void register(DefaultTileData data) {
         heapLevel.register(data);
     }
 
     /** 移除瓦片记录（由 TileData.dispose 自动调用，也可手动调用） */
-    public void remove(TileData data) {
+    public void remove(DefaultTileData data) {
         heapLevel.remove(data);
     }
 
