@@ -32,6 +32,11 @@ public abstract class AbstractTileData implements TileData {
     }
 
     @Override
+    public boolean valid(){
+        return refCount.get() > 0;
+    }
+
+    @Override
     public int acquireIfValid() {
         int current;
         do {

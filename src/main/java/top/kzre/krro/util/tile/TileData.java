@@ -12,6 +12,8 @@ public interface TileData {
 
     int refCount();
 
+    boolean valid();
+
     int acquireIfValid();
 
     int getByteSize();
