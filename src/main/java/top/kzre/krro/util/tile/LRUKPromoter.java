@@ -3,6 +3,7 @@ package top.kzre.krro.util.tile;
 import lombok.Getter;
 import top.kzre.krro.util.tile.util.WeakReferenceQueue;
 
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -127,6 +128,11 @@ public final class LRUKPromoter implements TileEvictor {
         @Override
         public float[] getPixels() {
             return delegate.getPixels();
+        }
+
+        @Override
+        public FloatBuffer floatBuffer() {
+            return delegate.floatBuffer();
         }
 
         @Override

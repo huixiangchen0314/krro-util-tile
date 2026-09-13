@@ -24,6 +24,7 @@ public class AbstractTile extends Tile{
      * 必须在持有锁时调用。
      */
     private void ensureWritable() {
+        ensureHeapTileData();
         TileData current = data;
         if (current.refCount() > 1) {
             TileData newData = current.copy();
@@ -31,6 +32,19 @@ public class AbstractTile extends Tile{
             data = newData;             // 新数据引用计数为 1
         }
         data.markDirty();
+    }
+
+    private void ensureHeapTileData(){
+        TileData current = data;
+        if (current instanceof HeapTileData) {
+            return;    // 已是 HeapTileData，无需转换
+        }
+        int floatCount = current.getByteSize() / Float.BYTES;
+        float[] pixels = new float[floatCount];
+        current.floatBuffer().get(pixels);
+
+        current.release();          // 释放当前引用（AbstractTile 持有的那一个）
+        data = new HeapTileData(pixels);   // 新实例，refCount = 1
     }
 
     // ────────── 旧版 RGBA 四通道接口（已废弃，请使用通用版本）──────────

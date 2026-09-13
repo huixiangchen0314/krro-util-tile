@@ -4,6 +4,7 @@ import lombok.Getter;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.FloatBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -11,19 +12,18 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 /**
- * 交换文件中保存的瓦片数据。
+ * 基于内存映射文件的瓦片数据。
  *
- * <p>用途：瓦片数量过多、内存吃紧时，将不活跃瓦片写入磁盘，
- * 需要时通过 mmap 读回。使用内存映射实现惰性加载，避免一次性分配堆内存。
- *
- * <p>生命周期：
+ * <p>用途：
  * <ul>
- *   <li>引用计数由 {@link AbstractTileData} 管理</li>
- *   <li>{@code onRelease} 清空映射引用；若 {@code deleteOnRelease=true} 则删除文件</li>
- *   <li>无论 {@code deleteOnRelease} 如何，都会调用 {@link java.io.File#deleteOnExit()} 兜底</li>
+ *   <li>瓦片过多、内存吃紧时，把不活跃瓦片写盘，需要时 mmap 读回</li>
+ *   <li>直接映射已存在的磁盘数据，避免一次性加载</li>
  * </ul>
+ *
+ * <p>相比 {@link DirectTileData}，本实现把数据放在文件系统而非匿名堆外内存，
+ * 因此释放后数据可持久（若 {@code deleteOnRelease=false}）或由 OS 回收。
  */
-public final class SwapTileData extends AbstractTileData {
+public final class MappedTileData extends AbstractTileData {
 
     private final int size;              // float 数量
     @Getter
@@ -39,7 +39,7 @@ public final class SwapTileData extends AbstractTileData {
      * @param src             初始像素数据
      * @param deleteOnRelease 释放时是否删除交换文件
      */
-    public SwapTileData(float[] src, boolean deleteOnRelease) {
+    public MappedTileData(float[] src, boolean deleteOnRelease) {
         if (src == null || src.length == 0) {
             throw new IllegalArgumentException("src must not be empty");
         }
@@ -66,7 +66,7 @@ public final class SwapTileData extends AbstractTileData {
      * @param size            float 数量
      * @param deleteOnRelease 释放时是否删除文件
      */
-    public SwapTileData(Path path, int size, boolean deleteOnRelease) {
+    public MappedTileData(Path path, int size, boolean deleteOnRelease) {
         if (path == null) {
             throw new IllegalArgumentException("path must not be null");
         }
@@ -101,10 +101,8 @@ public final class SwapTileData extends AbstractTileData {
      */
     @Override
     public float[] getPixels() {
-        MappedByteBuffer m = requireMapping();
         float[] out = new float[size];
-        // duplicate 不改变原 buffer 的 position，可并发调用
-        m.asFloatBuffer().get(out);
+        floatBuffer().get(out);   // ← position=0，安全
         return out;
     }
 
@@ -123,11 +121,35 @@ public final class SwapTileData extends AbstractTileData {
     }
 
     /**
-     * 零拷贝只读视图。LWJGL 上传纹理时可用，避免回读到 float[]。
-     * 调用方不得改变其 position/limit。
+     * 内部映射引用。零包装。
+     *
+     * <p><b>警告</b>：任何对返回 buffer 的 position/limit 修改都会影响本实例的
+     * 后续操作，包括 {@link #mapping()}、{@link #getPixels()} 等。
+     * 除非明确知道自己在做什么，否则请用 {@link #mapping()}。
+     */
+    public MappedByteBuffer rawMapping() {
+        return requireMapping();
+    }
+
+    /**
+     * 安全视图。position=0，limit=byteSize，独立对象。
+     * LWJGL 上传纹理时用这个，不会污染内部状态。
      */
     public MappedByteBuffer mapping() {
-        return requireMapping();
+        MappedByteBuffer m = requireMapping();
+        MappedByteBuffer dup = (MappedByteBuffer) m.duplicate();
+        dup.position(0);
+        dup.limit(size * Float.BYTES);
+        return dup;
+    }
+
+    /**
+     * 底层像素的活视图。position=0，limit=size（float 数量）。
+     * 独立视图对象，修改其 position 不影响内部映射。
+     */
+    @Override
+    public FloatBuffer floatBuffer() {
+        return mapping().asFloatBuffer();
     }
 
     public int size() {
@@ -142,7 +164,7 @@ public final class SwapTileData extends AbstractTileData {
     @Override
     public TileData copy() {
         // 拷贝到新的交换文件（独立生命周期）
-        return new SwapTileData(getPixels(), deleteOnRelease);
+        return new MappedTileData(getPixels(), deleteOnRelease);
     }
 
     @Override
@@ -167,7 +189,7 @@ public final class SwapTileData extends AbstractTileData {
         MappedByteBuffer m = mapping;
         if (m == null) {
             throw new IllegalStateException(
-                    "SwapTileData has been released: " + path);
+                    "MappedTileData has been released: " + path);
         }
         return m;
     }

@@ -23,7 +23,7 @@ public final class DirectTileData extends AbstractTileData {
 
     private final int size;          // float 数量
     private ByteBuffer buffer;
-    private FloatBuffer floatView;
+    private FloatBuffer floatBuffer;
 
     /** 按 float 数量分配堆外内存。 */
     public DirectTileData(int size) {
@@ -33,13 +33,13 @@ public final class DirectTileData extends AbstractTileData {
         this.size = size;
         this.buffer = ByteBuffer.allocateDirect(size * Float.BYTES)
                 .order(ByteOrder.nativeOrder());
-        this.floatView = buffer.asFloatBuffer();
+        this.floatBuffer = buffer.asFloatBuffer();
     }
 
     /** 从堆内数组拷贝到堆外。 */
     public DirectTileData(float[] src) {
         this(src.length);
-        this.floatView.put(src);
+        this.floatBuffer.put(src);
     }
 
     /**
@@ -70,15 +70,31 @@ public final class DirectTileData extends AbstractTileData {
         }
         this.size = size;
         this.buffer = externalBuffer;
-        this.floatView = externalBuffer.asFloatBuffer();
+        this.floatBuffer = externalBuffer.asFloatBuffer();
+    }
+
+
+    /** 内部引用，零包装。调用方自负 position/limit 责任。 */
+    public ByteBuffer rawBuffer() { return buffer; }
+
+    /** 安全视图，position=0，limit=byteSize。 */
+    public ByteBuffer buffer() {
+        ByteBuffer dup = buffer.duplicate();
+        dup.position(0);
+        dup.limit(size * Float.BYTES);
+        return dup;
     }
 
     /**
-     * 零拷贝视图。LWJGL 的所有 GL 调用可直接使用此 buffer。
-     * 调用方不得改变其 position/limit，如需操作请 {@link FloatBuffer#duplicate()}。
+     * 底层像素的活视图。position=0，limit=size（float 数量）。
+     * 每次调用返回新视图对象；修改其 position 不影响内部状态。
      */
-    public FloatBuffer buffer() {
-        return floatView;
+    @Override
+    public FloatBuffer floatBuffer() {
+        FloatBuffer dup = floatBuffer.duplicate();
+        dup.position(0);
+        dup.limit(size);
+        return dup;
     }
 
     public int size() {
@@ -89,7 +105,7 @@ public final class DirectTileData extends AbstractTileData {
     @Override
     public float[] getPixels() {
         float[] out = new float[size];
-        FloatBuffer dup = floatView.duplicate();
+        FloatBuffer dup = floatBuffer.duplicate();
         dup.position(0);
         dup.get(out);
         return out;
@@ -101,7 +117,7 @@ public final class DirectTileData extends AbstractTileData {
             throw new IllegalArgumentException(
                     "size mismatch: expected " + size + ", got " + src.length);
         }
-        FloatBuffer dup = floatView.duplicate();
+        FloatBuffer dup = floatBuffer.duplicate();
         dup.position(0);
         dup.put(src);
     }
@@ -122,7 +138,7 @@ public final class DirectTileData extends AbstractTileData {
     protected void onRelease() {
         // 清空引用，本地内存由 ByteBuffer 的 Cleaner 随 GC 释放。
         buffer = null;
-        floatView = null;
+        floatBuffer = null;
     }
 
     @Override
@@ -154,9 +170,9 @@ public final class DirectTileData extends AbstractTileData {
         if (buffer == null) {
             buffer = ByteBuffer.allocateDirect(size * Float.BYTES)
                     .order(ByteOrder.nativeOrder());
-            floatView = buffer.asFloatBuffer();
+            floatBuffer = buffer.asFloatBuffer();
         }
-        FloatBuffer dup = floatView.duplicate();
+        FloatBuffer dup = floatBuffer.duplicate();
         dup.position(0);
         dup.put(src);
     }

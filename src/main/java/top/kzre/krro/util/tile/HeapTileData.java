@@ -2,6 +2,8 @@ package top.kzre.krro.util.tile;
 
 import top.kzre.krro.util.pool.*;
 
+import java.nio.FloatBuffer;
+
 /**
  * JVM堆内存储的瓦片数据
  */
@@ -22,6 +24,11 @@ public final class HeapTileData extends AbstractTileData {
     @Override
     public float[] getPixels() {
         return pixels;
+    }
+
+    @Override
+    public FloatBuffer floatBuffer() {
+        return FloatBuffer.wrap(pixels);
     }
 
 
