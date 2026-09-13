@@ -6,6 +6,11 @@ package top.kzre.krro.util.tile;
 public interface TileData {
     float[] getPixels();
 
+    // 标记脏，默认什么也不做
+    default void markDirty(){
+
+    }
+
     int acquire();
 
     int release();

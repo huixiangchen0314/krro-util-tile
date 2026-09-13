@@ -1,14 +1,15 @@
 package top.kzre.krro.util.tile;
 
-import top.kzre.krro.util.pool.FloatsHolder;
-import top.kzre.krro.util.pool.FloatsPools;
-import top.kzre.krro.util.pool.PoolManagers;
+import top.kzre.krro.util.pool.*;
 
 /**
  * JVM堆内存储的瓦片数据
  */
 public final class HeapTileData extends AbstractTileData {
-
+    private static final FloatsHolder holder;
+    static {
+         holder = PoolManagers.floats().getHolder();
+    }
     private final int size;
 
     private float[] pixels;
@@ -27,7 +28,7 @@ public final class HeapTileData extends AbstractTileData {
     @Override
     protected void onRelease() {
         if (pixels != null) {
-            FloatsPools.getPool(pixels.length).release(pixels);
+            holder.getPool(pixels.length).release(pixels);
             pixels = null;
         }
     }
@@ -40,7 +41,6 @@ public final class HeapTileData extends AbstractTileData {
 
     @Override
     public TileData copy() {
-        FloatsHolder holder = PoolManagers.floats().getHolder();
         float[] newPixels = holder.getPool(size).acquire();
         System.arraycopy(pixels, 0, newPixels, 0, size);
         return new HeapTileData(newPixels);

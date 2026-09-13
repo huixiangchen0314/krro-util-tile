@@ -2,7 +2,9 @@ package top.kzre.krro.util.tile;
 
 import lombok.Getter;
 import lombok.Setter;
+import top.kzre.krro.util.pool.FloatsHolder;
 import top.kzre.krro.util.pool.FloatsPools;
+import top.kzre.krro.util.pool.PoolManagers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,6 +66,11 @@ public final class TiledCanvas implements Canvas {
     @Deprecated
     public static int localY(int worldY, int tileSize) {
         return Math.floorMod(worldY, tileSize);
+    }
+
+    private static final FloatsHolder holder;
+    static {
+        holder = PoolManagers.floats().getHolder();
     }
 
     // ---------- 字段 ----------
@@ -521,7 +528,7 @@ public final class TiledCanvas implements Canvas {
     // ---------- 内部辅助 ----------
     private float[] allocateTile() {
         int len = tileSize * tileSize * channels;
-        return FloatsPools.getPool(len).acquire();
+        return holder.getPool(len).acquire();
     }
 
     private void fillTileWithDefault(float[] tile) {
@@ -609,7 +616,7 @@ public final class TiledCanvas implements Canvas {
      * 直接使用传入的像素数组，<b>不进行复制</b>。调用者必须满足：
      * <ul>
      *   <li>数组长度必须为 {@code tileSize * tileSize * channels}</li>
-     *   <li>数组必须是从 {@link top.kzre.krro.util.pool.FloatsPools} 获取的，
+     *   <li>数组必须是从 {@link top.kzre.krro.util.pool} 获取的，
      *       且调用者<b>转移所有权</b>给本画布，之后不得再修改或释放该数组</li>
      *   <li>若数组不符合池化要求（例如是普通 {@code new float[]}），
      *       将导致池污染和未定义行为，所有风险由调用者承担</li>

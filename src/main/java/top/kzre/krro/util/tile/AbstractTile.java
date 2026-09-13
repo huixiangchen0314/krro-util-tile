@@ -30,6 +30,7 @@ public class AbstractTile extends Tile{
             current.release();          // 释放旧数据
             data = newData;             // 新数据引用计数为 1
         }
+        data.markDirty();
     }
 
     // ────────── 旧版 RGBA 四通道接口（已废弃，请使用通用版本）──────────

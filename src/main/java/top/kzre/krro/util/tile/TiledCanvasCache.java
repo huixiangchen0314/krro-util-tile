@@ -3,6 +3,9 @@ package top.kzre.krro.util.tile;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * FIFO 缓存
+ */
 public final class TiledCanvasCache {
 
     private final LRUCache cache;

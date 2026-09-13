@@ -9,7 +9,7 @@ public abstract class Tile {
 
     abstract TileData getDataRef();
 
-   public abstract int tx();
+    public abstract int tx();
 
     public abstract int ty();
 
