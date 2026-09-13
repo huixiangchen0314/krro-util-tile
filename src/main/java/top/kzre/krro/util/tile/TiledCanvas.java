@@ -230,13 +230,17 @@ public final class TiledCanvas implements Canvas {
     public void replaceTile(int tx, int ty, ByteBuffer buffer) {
         int size = channels * tileSize * tileSize;
         DirectTileData directTileData = new DirectTileData(buffer, size);
+        replaceTile(tx, ty, directTileData);
+    }
+
+    public void replaceTile(int tx, int ty, TileData tileData) {
         long tileKey = pack(tx, ty);
         synchronized (this) {
             Tile oldTile = this.tiles.get(tileKey);
             if (oldTile != null) {
-                oldTile.replaceData(directTileData);
+                oldTile.replaceData(tileData);
             }else {
-                DefaultTile tile = new DefaultTile(tx, ty, directTileData);
+                DefaultTile tile = new DefaultTile(tx, ty, tileData);
                 this.tiles.put(tileKey, tile);
             }
         }
@@ -766,4 +770,6 @@ public final class TiledCanvas implements Canvas {
             throw new UnsupportedOperationException("Canvas is read-only");
         }
     }
+
+
 }

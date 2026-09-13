@@ -9,6 +9,44 @@ public abstract class Tile {
 
     abstract TileData getDataRef();
 
+    /**
+     * 以类型 {@code T} 查询瓦片数据的能力。
+     *
+     * <p>如果内部数据实现了 {@code type}，返回该实例；否则返回
+     * {@code null}。用于上层判断 tile 是否支持某种能力并拿到接口引用：
+     * <pre>{@code
+     * GLTile gpu = tile.queryData(GLTile.class);
+     * if (gpu != null) {
+     *     gpu.ensureUploaded();
+     *     GLTileDescriptor d = gpu.getDescriptor();
+     * }
+     * }</pre>
+     *
+     * <p><b>拒绝 {@link TileData}</b>——{@code queryData(TileData.class)}
+     * 抛 {@link IllegalArgumentException}。直接暴露内部数据会让上层绕过
+     * 能力接口操作引用计数，破坏封装。上层应查询具体能力接口。
+     *
+     * @param type 查询的能力接口类型；不能为 {@code null} 或 {@link TileData}
+     * @return 内部数据实现了 {@code type} 时返回该实例；否则 {@code null}
+     * @throws IllegalArgumentException type 为 {@code null} 或 {@link TileData}
+     */
+    public <T> T queryData(Class<T> type) {
+        if (type == null) {
+            throw new IllegalArgumentException("type must not be null");
+        }
+        if (type == TileData.class) {
+            throw new IllegalArgumentException(
+                    "Cannot query for TileData directly; query a specific "
+                            + "capability interface (e.g. GLTile) instead");
+        }
+        TileData data = getDataRef();
+        if (data == null) {
+            return null;
+        }
+        return type.isInstance(data) ? type.cast(data) : null;
+    }
+
+
     public abstract int tx();
 
     public abstract int ty();
