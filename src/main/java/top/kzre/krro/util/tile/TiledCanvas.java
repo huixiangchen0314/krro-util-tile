@@ -3,9 +3,9 @@ package top.kzre.krro.util.tile;
 import lombok.Getter;
 import lombok.Setter;
 import top.kzre.krro.util.pool.FloatsHolder;
-import top.kzre.krro.util.pool.FloatsPools;
 import top.kzre.krro.util.pool.PoolManagers;
 
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -223,6 +223,21 @@ public final class TiledCanvas implements Canvas {
             Tile removed = tiles.remove(key);
             if (removed != null) {
                 removed.getDataRef().release();
+            }
+        }
+    }
+
+    public void replaceTile(int tx, int ty, ByteBuffer buffer) {
+        int size = channels * tileSize * tileSize;
+        DirectTileData directTileData = new DirectTileData(buffer, size);
+        long tileKey = pack(tx, ty);
+        synchronized (this) {
+            Tile oldTile = this.tiles.get(tileKey);
+            if (oldTile != null) {
+                oldTile.replaceData(directTileData);
+            }else {
+                DefaultTile tile = new DefaultTile(tx, ty, directTileData);
+                this.tiles.put(tileKey, tile);
             }
         }
     }
@@ -447,6 +462,7 @@ public final class TiledCanvas implements Canvas {
         cloned.shareFrom(this);
         return cloned;
     }
+
 
     /**
      * 将另一个画布的数据共享到当前画布（引用计数增加，轻量级快照）。

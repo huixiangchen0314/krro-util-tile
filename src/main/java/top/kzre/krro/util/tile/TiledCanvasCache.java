@@ -1,5 +1,6 @@
 package top.kzre.krro.util.tile;
 
+import java.nio.FloatBuffer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -45,6 +46,8 @@ public final class TiledCanvasCache {
             cache.clear();
         }
     }
+
+
 
     // ---- 内部 LRU 实现 ----
     private static class LRUCache extends LinkedHashMap<Object, TiledCanvas> {
