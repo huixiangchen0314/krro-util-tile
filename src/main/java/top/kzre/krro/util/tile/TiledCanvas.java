@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * <p>
  * 撤销/重做功能由上层（Clojure）实现，本类不提供任何历史记录。
  */
-public final class TiledCanvas implements Canvas {
+public final class TiledCanvas implements Canvas, AutoCloseable {
 
     public static long pack(int tx, int ty) {
         return ((long) tx << 32) | (ty & 0xFFFFFFFFL);
@@ -96,6 +96,9 @@ public final class TiledCanvas implements Canvas {
     @Setter
     private volatile boolean readonly = false;
 
+    @Getter
+    private volatile boolean closed = false;
+
     // ---------- 构造器 ----------
     public TiledCanvas(int tileSize) {
         this(tileSize, new float[]{0f, 0f, 0f, 0f}, 4);
@@ -165,7 +168,7 @@ public final class TiledCanvas implements Canvas {
     // ---------- 包内可见的瓦片访问 ----------
     @Override
     public Tile ensureTile(int tx, int ty) {
-        checkReadonly();
+        checkWritable();
 
         long key = pack(tx, ty);
         Tile tile = tiles.get(key);
@@ -189,7 +192,7 @@ public final class TiledCanvas implements Canvas {
     }
 
     void deleteTile(int tx, int ty) {
-        checkReadonly();
+        checkWritable();
 
         long key = pack(tx, ty);
         Tile removed = tiles.remove(key);
@@ -202,7 +205,7 @@ public final class TiledCanvas implements Canvas {
     }
 
     public void deleteTile(Long key){
-        checkReadonly();
+        checkWritable();
 
         Tile removed = tiles.remove(key);
         if (removed != null) {
@@ -214,7 +217,7 @@ public final class TiledCanvas implements Canvas {
     }
 
     public void deleteTiles(Iterable<Long> keys){
-        checkReadonly();
+        checkWritable();
 
         if(keys == null) {
             return;
@@ -271,14 +274,14 @@ public final class TiledCanvas implements Canvas {
     @Deprecated
     @Override
     public void setPixel(int worldX, int worldY, float r, float g, float b, float a) {
-        checkReadonly();
+        checkWritable();
 
         setPixel(worldX, worldY, new float[]{r, g, b, a});
     }
 
     @Override
     public void setPixel(int x, int y, float[] pixel) {
-        checkReadonly();
+        checkWritable();
 
         if (pixel.length < channels) throw new IllegalArgumentException("pixel array too short");
         int tx = tile(x, tileSize);
@@ -338,7 +341,7 @@ public final class TiledCanvas implements Canvas {
 
     @Override
     public void writeBytes(float[] src, int srcOffset, int x, int y, int w, int h, int srcRowStride) {
-        checkReadonly();
+        checkWritable();
 
         if (src == null) throw new IllegalArgumentException("src cannot be null");
         if (w <= 0 || h <= 0) return;
@@ -373,7 +376,7 @@ public final class TiledCanvas implements Canvas {
     // ---------- 填充 ----------
     @Override
     public void fillRect(int x, int y, int w, int h, float[] color) {
-        checkReadonly();
+        checkWritable();
 
         if (color == null || color.length < channels)
             throw new IllegalArgumentException("color must be a float[4]");
@@ -441,10 +444,21 @@ public final class TiledCanvas implements Canvas {
         }
     }
 
+    /**
+     * 安全清空，如果是只读画布就不清空了。
+     * 并且清空时候有错误也静默.
+     */
+    public void safeClear(){
+        try{
+            clear();
+        }catch (Throwable ignored){
+        }
+    }
+
     // ---------- 清空 ----------
     @Override
     public void clear() {
-        checkReadonly();
+        checkWritable();
 
         if (tiles == null || tiles.isEmpty()) return;
 
@@ -473,7 +487,7 @@ public final class TiledCanvas implements Canvas {
      * 当前画布的原有数据会被释放。
      */
     public synchronized void shareFrom(TiledCanvas src) {
-        checkReadonly();
+        checkWritable();
         if (src.tileSize != this.tileSize)
             throw new IllegalArgumentException("tileSize mismatch");
 
@@ -625,7 +639,7 @@ public final class TiledCanvas implements Canvas {
 
     @Override
     public void writeTiles(Map<Long, float[]> newTiles) {
-        checkReadonly();
+        checkWritable();
 
         mergeTiles(newTiles);   // 复用已有的零拷贝合并方法
     }
@@ -648,7 +662,7 @@ public final class TiledCanvas implements Canvas {
      * @throws IllegalArgumentException 如果任意数组长度不匹配
      */
     public TiledCanvas mergeTiles(Map<Long, float[]> newTiles) {
-        checkReadonly();
+        checkWritable();
 
         int expectedLen = tileSize * tileSize * channels;
         for (Map.Entry<Long, float[]> entry : newTiles.entrySet()) {
@@ -686,7 +700,7 @@ public final class TiledCanvas implements Canvas {
      * @throws IllegalArgumentException 如果 tileSize 不匹配
      */
     public TiledCanvas mergeCanvas(TiledCanvas canvas) {
-        checkReadonly();
+        checkWritable();
 
         if (canvas.tileSize != this.tileSize) {
             throw new IllegalArgumentException("tileSize mismatch");
@@ -717,7 +731,7 @@ public final class TiledCanvas implements Canvas {
     }
 
     public void deleteTiles(Collection<Long> keys) {
-        checkReadonly();
+        checkWritable();
 
         for (Long key : keys) {
             Tile removed = tiles.remove(key);
@@ -765,11 +779,36 @@ public final class TiledCanvas implements Canvas {
         return split(1);
     }
 
-    private void checkReadonly() {
+    private void checkWritable() {
+        if (closed) {
+            throw new IllegalStateException("Canvas is closed");
+        }
         if (readonly) {
             throw new UnsupportedOperationException("Canvas is read-only");
         }
     }
 
+    @Override
+    public void close() throws Exception {
+        if (closed) return;                        // 快速路径——无锁
+        synchronized (this) {
+            if (closed) return;                    // 双检——幂等
+            closed = true;                         // 先置标志——后续写操作立即拒绝
 
+            // ── 释放所有瓦片数据——逐个捕获
+            for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
+                try {
+                    entry.getValue().getDataRef().release();
+                } catch (Throwable ignored) {
+                }
+            }
+            tiles.clear();
+
+            // ── 重置范围
+            minTileX = Integer.MAX_VALUE;
+            maxTileX = Integer.MIN_VALUE;
+            minTileY = Integer.MAX_VALUE;
+            maxTileY = Integer.MIN_VALUE;
+        }
+    }
 }
