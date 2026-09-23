@@ -99,13 +99,24 @@ public class AbstractTile extends Tile{
     }
 
     /**
-     * 替换当前数据（用于共享, 或者存储设施更新）。调用者需保证新数据的引用计数已增加。
+     * 替换当前数据（用于共享、或存储设施更新）。
+     *
+     * <p><b>幂等</b>：先 acquire 新数据、再 release 旧数据。当
+     * {@code newData == data} 时，acquire 和 release 净效果为零，
+     * 引用计数不变，不会触发瞬时的归零副作用。
+     *
+     * <p><b>调用者不需预先增加引用计数</b>——本方法内部完成。
+     *
+     * @throws IllegalArgumentException newData 为 null
      */
     @Override
     synchronized void replaceData(TileData newData) {
+        if (newData == null) {
+            throw new IllegalArgumentException("newData must not be null");
+        }
+        newData.acquire();
         data.release();
         data = newData;
-        newData.acquire();
     }
 
     /** 包内方法：获取当前数据引用（不增加引用计数） */
