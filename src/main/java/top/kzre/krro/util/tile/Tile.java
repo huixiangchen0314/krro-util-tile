@@ -5,7 +5,24 @@ package top.kzre.krro.util.tile;
  * 线程安全（所有公开方法使用 synchronized 保证可见性和原子性）。
  */
 public abstract class Tile {
-    abstract void replaceData(TileData newData);
+
+    /**
+     * 替换当前数据（用于共享、或存储设施更新）。
+     *
+     * <p><b>幂等</b>：先 acquire 新数据、再 release 旧数据。当
+     * {@code newData == data} 时，acquire 和 release 净效果为零，
+     * 引用计数不变，不会触发瞬时的归零副作用。
+     *
+     * <p><b>调用者不需预先增加引用计数</b>——本方法内部完成。
+     *
+     * <p><b>线程契约</b>：方法本身 {@code synchronized}，可从任意线程调用。
+     * 但替换后数据的可见性由调用方负责——如果其他线程持有旧引用并继续
+     * 访问，需要外部同步。
+     *
+     * @param newData 新数据，不能为 null
+     * @throws IllegalArgumentException newData 为 null
+     */
+    public abstract void replaceData(TileData newData) ;
 
     abstract TileData getDataRef();
 

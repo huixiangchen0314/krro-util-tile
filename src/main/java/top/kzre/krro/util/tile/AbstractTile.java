@@ -110,7 +110,7 @@ public class AbstractTile extends Tile{
      * @throws IllegalArgumentException newData 为 null
      */
     @Override
-    synchronized void replaceData(TileData newData) {
+    public synchronized void replaceData(TileData newData) {
         if (newData == null) {
             throw new IllegalArgumentException("newData must not be null");
         }
