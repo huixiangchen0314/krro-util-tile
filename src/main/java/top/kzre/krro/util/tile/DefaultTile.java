@@ -9,7 +9,7 @@ public final class DefaultTile extends AbstractTile{
      * @param ty
      * @param data
      */
-    DefaultTile(int tx, int ty, TileData data) {
+    public DefaultTile(int tx, int ty, TileData data) {
         super(tx, ty, data);
     }
 }
