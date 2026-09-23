@@ -242,7 +242,17 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         replaceTile(tx, ty, directTileData);
     }
 
+
+    public void replaceTile(Tile tile) {
+        if (tile == null) throw new IllegalArgumentException("tile cannot be null");
+        TileData dataRef = tile.getDataRef();
+        replaceTile(tile.tx(), tile.ty(), dataRef);
+    }
+
     public void replaceTile(int tx, int ty, TileData tileData) {
+        if (tileData == null) throw new IllegalArgumentException("tileData cannot be null");
+        checkWritable();
+
         long tileKey = pack(tx, ty);
         synchronized (this) {
             Tile oldTile = this.tiles.get(tileKey);
@@ -254,6 +264,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             }
         }
     }
+
 
     @Override
     public int tileCount() {
@@ -496,8 +507,16 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
      */
     public synchronized void shareFrom(TiledCanvas src) {
         checkWritable();
+        if (src == null)
+            throw new IllegalArgumentException("src must not be null");
+        if (src == this)
+            throw new IllegalArgumentException(
+                    "cannot shareFrom self: shareFrom clears this canvas first, "
+                            + "which would destroy the source");
         if (src.tileSize != this.tileSize)
             throw new IllegalArgumentException("tileSize mismatch");
+        if (src.channels != this.channels)
+            throw new IllegalArgumentException("channels mismatch");
 
         // 释放当前所有瓦片
         clear();
