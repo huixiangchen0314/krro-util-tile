@@ -100,17 +100,22 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     @Getter
     private volatile boolean closed = false;
 
+    private final TileFactory tileFactory;
+
     // ---------- 构造器 ----------
+    @Deprecated
     public TiledCanvas(int tileSize) {
-        this(tileSize, new float[]{0f, 0f, 0f, 0f}, 4);
+        this(tileSize, new float[]{0f, 0f, 0f, 0f}, 4, DefaultTileFactory.INSTANCE);
     }
 
+    @Deprecated
     public TiledCanvas(int tileSize, float[] defaultPixel) {
-        this(tileSize, defaultPixel, 4);   // 默认 4 通道
+        this(tileSize, defaultPixel, 4, DefaultTileFactory.INSTANCE);   // 默认 4 通道
     }
 
     // 完整构造器
-    public TiledCanvas(int tileSize, float[] defaultPixel, int channels) {
+    public TiledCanvas(int tileSize, float[] defaultPixel, int channels, TileFactory tileFactory) {
+        this.tileFactory = tileFactory;
         if (tileSize <= 0) throw new IllegalArgumentException("tileSize must be positive");
         if (channels < 1 || channels > 10)  // 根据实际需要限定范围
             throw new IllegalArgumentException("channels must be between 1 and 10");
@@ -177,7 +182,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             float[] raw = allocateTile();
             fillTileWithDefault(raw);
             HeapTileData data = new HeapTileData(raw);
-            Tile newTile = new DefaultTile(tx, ty, data);
+            Tile newTile = tileFactory.create(tx, ty, data);
             Tile existing = tiles.putIfAbsent(key, newTile);
             if (existing != null) {
                 data.release();
@@ -244,7 +249,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             if (oldTile != null) {
                 oldTile.replaceData(tileData);
             }else {
-                DefaultTile tile = new DefaultTile(tx, ty, tileData);
+                Tile tile = tileFactory.create(tx, ty, tileData);
                 this.tiles.put(tileKey, tile);
             }
         }
@@ -411,7 +416,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                         float[] raw = allocateTile();
                         fillTileWithColor(raw, color);
                         HeapTileData data = new HeapTileData(raw);
-                        Tile newTile = new DefaultTile(tx, ty, data);
+                        Tile newTile = tileFactory.create(tx, ty, data);
                         Tile existing = tiles.putIfAbsent(pack(tx, ty), newTile);
                         if (existing != null) {
                             data.release();
@@ -479,7 +484,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
 
     // COW 拷贝，不提供深拷贝
     public TiledCanvas copy(){
-        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel, channels);
+        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel, channels, DefaultTileFactory.INSTANCE);
         cloned.shareFrom(this);
         return cloned;
     }
@@ -509,7 +514,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 throw new IllegalStateException("TileData already released during shareFrom");
             }
 
-            Tile newTile = new DefaultTile(srcTile.tx(), srcTile.ty(), data);
+            Tile newTile = tileFactory.create(srcTile.tx(), srcTile.ty(), data);
             tiles.put(key, newTile);
         }
 
@@ -683,7 +688,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             if (existingTile != null) {
                 existingTile.replaceData(newData);   // 内部管理引用计数
             } else {
-                Tile newTile = new DefaultTile(unpackTx(key), unpackTy(key), newData);
+                Tile newTile = tileFactory.create(unpackTx(key), unpackTy(key), newData);
                 tiles.put(key, newTile);
             }
 
@@ -720,9 +725,9 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 // 释放目标画布原有的瓦片数据
                 existingTile.getDataRef().release();
                 // 直接替换为新的 Tile（使用同一个 TileData）
-                this.tiles.put(key, new DefaultTile(unpackTx(key), unpackTy(key), srcData));
+                this.tiles.put(key, tileFactory.create(unpackTx(key), unpackTy(key), srcData));
             } else {
-                this.tiles.put(key, new DefaultTile(unpackTx(key), unpackTy(key), srcData));
+                this.tiles.put(key, tileFactory.create(unpackTx(key), unpackTy(key), srcData));
                 // 仅在新添加瓦片时更新范围
                 synchronized (this) {
                     updateExtent(unpackTx(key), unpackTy(key));

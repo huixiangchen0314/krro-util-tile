@@ -4,6 +4,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
+@Deprecated
 public class RLE {
     /**
      * 将浮点数组进行游程编码并写入输出流。
