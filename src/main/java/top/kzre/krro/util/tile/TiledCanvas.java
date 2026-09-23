@@ -479,7 +479,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
 
     // COW 拷贝，不提供深拷贝
     public TiledCanvas copy(){
-        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel);
+        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel, channels);
         cloned.shareFrom(this);
         return cloned;
     }
