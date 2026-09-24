@@ -732,27 +732,26 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         if (canvas.tileSize != this.tileSize) {
             throw new IllegalArgumentException("tileSize mismatch");
         }
+
         for (Map.Entry<Long, Tile> entry : canvas.tiles.entrySet()) {
             long key = entry.getKey();
             Tile srcTile = entry.getValue();
             TileData srcData = srcTile.getDataRef();
-            // 增加引用计数，代表当前画布将持有一个引用
-            srcData.acquire();
+            int tx = unpackTx(key);
+            int ty = unpackTy(key);
 
             Tile existingTile = this.tiles.get(key);
             if (existingTile != null) {
-                // 释放目标画布原有的瓦片数据
-                existingTile.getDataRef().release();
-                // 直接替换为新的 Tile（使用同一个 TileData）
-                this.tiles.put(key, tileFactory.create(unpackTx(key), unpackTy(key), srcData));
+                // 已存在：replaceData 内部 acquire 新数据、释放旧数据
+                existingTile.replaceData(srcData);
             } else {
-                this.tiles.put(key, tileFactory.create(unpackTx(key), unpackTy(key), srcData));
-                // 仅在新添加瓦片时更新范围
+                // 不存在：外部 acquire 一次，代表当前画布持有
+                srcData.acquire();
+                this.tiles.put(key, tileFactory.create(tx, ty, srcData));
                 synchronized (this) {
-                    updateExtent(unpackTx(key), unpackTy(key));
+                    updateExtent(tx, ty);
                 }
             }
-
         }
         return this;
     }
