@@ -103,33 +103,46 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     private final TileFactory tileFactory;
 
     // ---------- 构造器 ----------
+
     @Deprecated
     public TiledCanvas(int tileSize) {
-        this(tileSize, new float[]{0f, 0f, 0f, 0f}, 4, DefaultTileFactory.INSTANCE);
+        this(tileSize, new float[]{0f, 0f, 0f, 0f}, DefaultTileFactory.INSTANCE);
     }
 
-    @Deprecated
     public TiledCanvas(int tileSize, float[] defaultPixel) {
-        this(tileSize, defaultPixel, 4, DefaultTileFactory.INSTANCE);   // 默认 4 通道
+        this(tileSize, defaultPixel, DefaultTileFactory.INSTANCE);
     }
 
-    // 完整构造器
-    public TiledCanvas(int tileSize, float[] defaultPixel, int channels, TileFactory tileFactory) {
-        this.tileFactory = tileFactory;
-        if (tileSize <= 0) throw new IllegalArgumentException("tileSize must be positive");
-        if (channels < 1 || channels > 10)  // 根据实际需要限定范围
-            throw new IllegalArgumentException("channels must be between 1 and 10");
-        if (defaultPixel == null || defaultPixel.length < channels)
-            throw new IllegalArgumentException("defaultPixel must have length >= " + channels);
+    /**
+     * 完整构造器。
+     *
+     * <p><b>通道数从 defaultPixel 推导</b>：{@code channels = defaultPixel.length}。
+     * 不再单独传 channels——避免和 defaultPixel 长度不一致。
+     *
+     * @param tileSize     瓦片边长，必须 &gt; 0
+     * @param defaultPixel 默认像素值。数组长度即通道数
+     * @param tileFactory  瓦片工厂
+     */
+    public TiledCanvas(int tileSize, float[] defaultPixel, TileFactory tileFactory) {
+        if (tileSize <= 0) {
+            throw new IllegalArgumentException("tileSize must be positive");
+        }
+        if (defaultPixel == null || defaultPixel.length == 0) {
+            throw new IllegalArgumentException("defaultPixel must not be null or empty");
+        }
+        if (tileFactory == null) {
+            throw new IllegalArgumentException("tileFactory must not be null");
+        }
 
-        this.tileSize = tileSize;
-        this.channels = channels;
-        this.tiles = new ConcurrentHashMap<>();
+        this.tileFactory  = tileFactory;
+        this.tileSize     = tileSize;
+        this.channels     = defaultPixel.length;
+        this.tiles        = new ConcurrentHashMap<>();
         this.defaultPixel = defaultPixel.clone();
-        this.minTileX = Integer.MAX_VALUE;
-        this.maxTileX = Integer.MIN_VALUE;
-        this.minTileY = Integer.MAX_VALUE;
-        this.maxTileY = Integer.MIN_VALUE;
+        this.minTileX     = Integer.MAX_VALUE;
+        this.maxTileX     = Integer.MIN_VALUE;
+        this.minTileY     = Integer.MAX_VALUE;
+        this.maxTileY     = Integer.MIN_VALUE;
     }
 
     /**
@@ -495,7 +508,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
 
     // COW 拷贝，不提供深拷贝
     public TiledCanvas copy(){
-        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel, channels, DefaultTileFactory.INSTANCE);
+        TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel, DefaultTileFactory.INSTANCE);
         cloned.shareFrom(this);
         return cloned;
     }
