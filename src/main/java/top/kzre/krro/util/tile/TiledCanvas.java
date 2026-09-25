@@ -95,7 +95,6 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     @Getter
     private volatile int maxTileY;
     @Getter
-    @Setter
     private volatile boolean readonly = false;
 
     @Getter
@@ -165,6 +164,11 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         return tiles.keySet();
     }
 
+    public TiledCanvas setReadonly(boolean readonly) {
+        this.readonly = readonly;
+        return this;
+    }
+
     /**
      * 遍历所有存在的瓦片，对每个瓦片调用回调函数。
      * 回调函数接收三个参数：瓦片索引 tx、ty 以及只读的像素数据数组。
@@ -174,6 +178,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
      *
      * @param visitor 回调函数，接受 (tx, ty, data)
      */
+    @Deprecated
     @Override
     public void forEachTile(TileVisitor visitor) {
         for (Map.Entry<Long, Tile> entry : tiles.entrySet()) {
@@ -211,7 +216,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         return tile;
     }
 
-    void deleteTile(int tx, int ty) {
+    public void deleteTile(int tx, int ty) {
         checkWritable();
 
         long key = pack(tx, ty);
@@ -326,6 +331,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     }
 
     // ---------- 批量读写 ----------
+    @Deprecated
     @Override
     public void readBytes(float[] dest, int destOffset, int x, int y, int w, int h, int destRowStride) {
         if (dest == null) throw new IllegalArgumentException("dest cannot be null");
@@ -372,6 +378,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         }
     }
 
+    @Deprecated
     @Override
     public void writeBytes(float[] src, int srcOffset, int x, int y, int w, int h, int srcRowStride) {
         checkWritable();
@@ -406,7 +413,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         }
     }
 
-    // ---------- 填充 ----------
+    @Deprecated
     @Override
     public void fillRect(int x, int y, int w, int h, float[] color) {
         checkWritable();
@@ -524,6 +531,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         mergeCanvas(src);
     }
 
+    @Deprecated
     @Override
     public void getBounds(int[] out) {
         if (out == null || out.length < 4)
@@ -537,9 +545,6 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         out[2] = (maxTileX + 1) * tileSize - 1;
         out[3] = (maxTileY + 1) * tileSize - 1;
     }
-
-
-    public int totalSize() { return tiles.size(); }
 
 
     @Override
@@ -592,7 +597,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         }
     }
 
-    private  void updateExtent(int tx, int ty) {
+    private void updateExtent(int tx, int ty) {
         if (tx < minTileX) minTileX = tx;
         if (tx > maxTileX) maxTileX = tx;
         if (ty < minTileY) minTileY = ty;
@@ -635,6 +640,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
      *
      * @param consumer 接收瓦片映射的回调，键为 pack(tx, ty)，值为瓦片像素数组（只读）
      */
+    @Deprecated
     @Override
     public void readTiles(Consumer<Map<Long, float[]>> consumer) {
         Map<Long, float[]> snapshot = new HashMap<>();
@@ -644,6 +650,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         consumer.accept(Collections.unmodifiableMap(snapshot));
     }
 
+    @Deprecated
     @Override
     public void writeTiles(Map<Long, float[]> newTiles) {
         checkWritable();
@@ -668,6 +675,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
      * @param newTiles 要合并的瓦片映射，键为 pack(tx, ty)，值为 RGBA float 数组（所有权转移）
      * @throws IllegalArgumentException 如果任意数组长度不匹配
      */
+    @Deprecated
     public TiledCanvas mergeTiles(Map<Long, float[]> newTiles) {
         checkWritable();
 
@@ -747,6 +755,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         }
     }
 
+    @Deprecated
     @Override
     public Canvas subCanvas(int x, int y, int w, int h) {
         // 将像素矩形转换为瓦片矩形（对齐瓦片边界）
@@ -759,6 +768,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         return new CanvasView(this, minTx, minTy, tileW, tileH);
     }
 
+    @Deprecated
     @Override
     public List<Canvas> split(int tileSpan) {
         if (tileSpan <= 0) throw new IllegalArgumentException("tileSpan must be positive");
@@ -780,6 +790,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         return tiles;
     }
 
+    @Deprecated
     @Override
     public List<Canvas> split() {
         return split(1);
