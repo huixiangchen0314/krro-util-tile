@@ -2,6 +2,7 @@ package top.kzre.krro.util.tile;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.java.Log;
 import top.kzre.krro.util.pool.FloatsHolder;
 import top.kzre.krro.util.pool.FloatsPool;
 import top.kzre.krro.util.pool.PoolManagers;
@@ -509,7 +510,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     // COW 拷贝，不提供深拷贝
     public TiledCanvas copy(){
         TiledCanvas cloned = new TiledCanvas(tileSize, defaultPixel, DefaultTileFactory.INSTANCE);
-        cloned.shareFrom(this);
+        cloned.mergeCanvas(this);
         return cloned;
     }
 
@@ -518,43 +519,9 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
      * 将另一个画布的数据共享到当前画布（引用计数增加，轻量级快照）。
      * 当前画布的原有数据会被释放。
      */
+    @Deprecated
     public synchronized void shareFrom(TiledCanvas src) {
-        checkWritable();
-        if (src == null)
-            throw new IllegalArgumentException("src must not be null");
-        if (src == this)
-            throw new IllegalArgumentException(
-                    "cannot shareFrom self: shareFrom clears this canvas first, "
-                            + "which would destroy the source");
-        if (src.tileSize != this.tileSize)
-            throw new IllegalArgumentException("tileSize mismatch");
-        if (src.channels != this.channels)
-            throw new IllegalArgumentException("channels mismatch");
-
-        // 释放当前所有瓦片
-        clear();
-
-        // 复制源画布的瓦片引用
-        for (Map.Entry<Long, Tile> entry : src.tiles.entrySet()) {
-            long key = entry.getKey();
-            Tile srcTile = entry.getValue();
-            TileData data = srcTile.getDataRef();
-
-            // 尝试增加引用计数（原子操作）
-            int newCount = data.acquireIfValid();
-            if (newCount == 0) {
-                throw new IllegalStateException("TileData already released during shareFrom");
-            }
-
-            Tile newTile = tileFactory.create(srcTile.tx(), srcTile.ty(), data);
-            tiles.put(key, newTile);
-        }
-
-        // 更新范围（在此同步块内安全）
-        this.minTileX = src.minTileX;
-        this.maxTileX = src.maxTileX;
-        this.minTileY = src.minTileY;
-        this.maxTileY = src.maxTileY;
+        mergeCanvas(src);
     }
 
     @Override
@@ -825,6 +792,54 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         if (readonly) {
             throw new UnsupportedOperationException("Canvas is read-only");
         }
+    }
+
+    /**
+     * 只保留指定的瓦片，其余全部释放。
+     *
+     * <p>传入的 keys 里的瓦片保留（引用计数不变），不在集合里的瓦片
+     * 释放并从画布移除。
+     *
+     * <p>若 keys 为 null 或空集，等同于清空整个画布。
+     * 若 keys 里有不存在的瓦片键，静默忽略。
+     *
+     * @param keys 要保留的瓦片键集合（pack 后的 long）
+     * @return this（链式）
+     * @throws IllegalStateException    画布已关闭
+     * @throws UnsupportedOperationException 画布只读
+     */
+    public TiledCanvas keepTiles(Set<Long> keys) {
+        checkWritable();
+
+        if (keys == null || keys.isEmpty()) {
+            clear();
+            return this;
+        }
+
+        // 先收集要删除的 key，避免边遍历边删
+        // ConcurrentHashMap 的 keySet 迭代弱一致——安全但语义不清晰
+        List<Long> toRemove = new ArrayList<>();
+        for (Long key : tiles.keySet()) {
+            if (!keys.contains(key)) {
+                toRemove.add(key);
+            }
+        }
+
+        for (Long key : toRemove) {
+            Tile removed = tiles.remove(key);
+            if (removed != null) {
+                removed.getDataRef().release();
+            }
+        }
+
+        // 有删除才重算 extent
+        if (!toRemove.isEmpty()) {
+            synchronized (this) {
+                recomputeExtent();
+            }
+        }
+
+        return this;
     }
 
     @Override
