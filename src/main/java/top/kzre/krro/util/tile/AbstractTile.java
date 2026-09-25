@@ -1,6 +1,6 @@
 package top.kzre.krro.util.tile;
 
-public class AbstractTile extends Tile{
+public class AbstractTile extends Tile {
     private final int tx, ty;
     private volatile TileData data;
 
@@ -39,12 +39,47 @@ public class AbstractTile extends Tile{
         if (current instanceof HeapTileData) {
             return;    // 已是 HeapTileData，无需转换
         }
+
+        // ── 降级路径埋点：谁在把 GPU 瓦片换回 CPU ──
+        {
+            StringBuilder sb = new StringBuilder("TileData lifted:");
+            for (StackTraceElement e : new Throwable().getStackTrace()) {
+                sb.append("\n>>>>>at ").append(e);
+            }
+            System.out.println(sb);
+        }
+
+
         int floatCount = current.getByteSize() / Float.BYTES;
         float[] pixels = new float[floatCount];
         current.floatBuffer().get(pixels);
 
         current.release();          // 释放当前引用（AbstractTile 持有的那一个）
         data = new HeapTileData(pixels);   // 新实例，refCount = 1
+    }
+
+    @Override
+    public synchronized boolean compareAndReplaceData(Tile other) {
+        if (other == null) {
+            throw new IllegalArgumentException("other must not be null");
+        }
+        if (other == this) return false;
+
+        // 一次读源数据——它既是源，也是版本快照
+        TileData src = other.getDataRef();
+        if (src == null) return false;
+
+        // 版本是 VersionedTile 的能力，不是 TileData 的——
+        // 先判能力接口，再转型
+        if (!(src instanceof VersionedTile)) return false;
+        Object srcVer = ((VersionedTile) src).version();
+
+        if (this.version() != srcVer) return false;
+
+        src.acquire();
+        data.release();
+        data = src;
+        return true;
     }
 
     // ────────── 旧版 RGBA 四通道接口（已废弃，请使用通用版本）──────────
@@ -119,10 +154,36 @@ public class AbstractTile extends Tile{
         data = newData;
     }
 
+    /**
+     * 替换数据，**接管** newData 的引用——不 acquire。
+     *
+     * <p>调用方必须已经持有 newData 的一份引用并放弃它。
+     * 与 {@link #replaceData} 的区别：后者 acquire 新数据、release 旧数据，
+     * 净效果是"共享一份"；本方法直接换引用，净效果是"接管"。
+     *
+     * <p>调用方需保证 newData != null。
+     */
+     synchronized void replaceDataOwned(TileData newData) {
+        TileData old = data;
+        data = newData;
+        old.release();
+    }
+
     /** 包内方法：获取当前数据引用（不增加引用计数） */
     @Override
     synchronized TileData getDataRef() {
         return data;
     }
 
+
+    @Override
+    public String toString() {
+        TileData d = data;
+        return "Tile{"
+                + "tx=" + tx
+                + ", ty=" + ty
+                + ", data=" + (d == null ? "null" : d.getClass().getSimpleName())
+                + ", refs=" + (d == null ? 0 : d.refCount())
+                + "}";
+    }
 }

@@ -4,7 +4,15 @@ package top.kzre.krro.util.tile;
  * 瓦片句柄，持有对 TileData 的引用，支持 COW 写入。
  * 线程安全（所有公开方法使用 synchronized 保证可见性和原子性）。
  */
-public abstract class Tile {
+public abstract class Tile implements VersionedTile{
+    @Override
+    public Object version() {
+        TileData data = getDataRef();
+        if (data instanceof VersionedTile) {
+            return ((VersionedTile) data).version();
+        }
+        return data;
+    }
 
     /**
      * 替换当前数据（用于共享、或存储设施更新）。
@@ -23,8 +31,11 @@ public abstract class Tile {
      * @throws IllegalArgumentException newData 为 null
      */
     public abstract void replaceData(TileData newData) ;
-
+    abstract void replaceDataOwned(TileData newData);
     abstract TileData getDataRef();
+
+    public abstract boolean compareAndReplaceData(Tile other);
+
 
     /**
      * 以类型 {@code T} 查询瓦片数据的能力。

@@ -2,7 +2,7 @@ package top.kzre.krro.util.tile;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-public abstract class AbstractTileData implements TileData {
+public abstract class AbstractTileData implements TileData, VersionedTile{
     private final AtomicInteger refCount;
     public AbstractTileData() {
         this.refCount = new AtomicInteger(1);

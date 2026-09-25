@@ -23,6 +23,9 @@ import java.util.function.Consumer;
  */
 public final class TiledCanvas implements Canvas, AutoCloseable {
 
+    // 内部锁
+    private final Object lock = new Object();
+
     public static long pack(int tx, int ty) {
         return ((long) tx << 32) | (ty & 0xFFFFFFFFL);
     }
@@ -208,7 +211,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 return existing;
             }
             // 注册到全局管理器
-            synchronized (this) {
+            synchronized (lock) {
                 updateExtent(tx, ty);
             }
             return newTile;
@@ -223,7 +226,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         Tile removed = tiles.remove(key);
         if (removed != null) {
             removed.getDataRef().release();
-            synchronized (this) {
+            synchronized (lock) {
                 recomputeExtent();
             }
         }
@@ -235,7 +238,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         Tile removed = tiles.remove(key);
         if (removed != null) {
             removed.getDataRef().release();
-            synchronized (this) {
+            synchronized (lock) {
                 recomputeExtent();
             }
         }
@@ -258,7 +261,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     public void replaceTile(int tx, int ty, ByteBuffer buffer) {
         int size = channels * tileSize * tileSize;
         DirectTileData directTileData = new DirectTileData(buffer, size);
-        replaceTile(tx, ty, directTileData);
+        replaceTileOwned(tx, ty, directTileData);
     }
 
 
@@ -269,20 +272,44 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     }
 
     public void replaceTile(int tx, int ty, TileData tileData) {
+        replaceTileShared(tx, ty, tileData);
+    }
+
+    private void replaceTileShared(int tx, int ty, TileData tileData) {
         if (tileData == null) throw new IllegalArgumentException("tileData cannot be null");
+        if(!tileData.valid()) throw  new IllegalArgumentException("tileData is released");
         checkWritable();
 
         long tileKey = pack(tx, ty);
-        synchronized (this) {
+        synchronized (lock) {
             Tile oldTile = this.tiles.get(tileKey);
             if (oldTile != null) {
                 oldTile.replaceData(tileData);
             }else {
+                // 外部提供的数据，提升引用计数
+                tileData.acquire();
                 Tile tile = tileFactory.create(tx, ty, tileData);
                 this.tiles.put(tileKey, tile);
             }
         }
     }
+
+    private void replaceTileOwned(int tx, int ty, TileData tileData) {
+        if (tileData == null) throw new IllegalArgumentException("tileData cannot be null");
+        checkWritable();
+        long tileKey = pack(tx, ty);
+        synchronized (lock) {
+            Tile oldTile = this.tiles.get(tileKey);
+            if (oldTile != null) {
+                oldTile.replaceDataOwned(tileData);
+            } else {
+                // 外部提供的数据内部创建的数据，获取初始的 1。
+                Tile tile = tileFactory.create(tx, ty, tileData);
+                this.tiles.put(tileKey, tile);
+            }
+        }
+    }
+
 
 
     @Override
@@ -453,7 +480,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                         if (existing != null) {
                             data.release();
                         } else {
-                            synchronized (this) {
+                            synchronized (lock) {
                                 updateExtent(tx, ty);
                             }
                         }
@@ -488,6 +515,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
      * 安全清空，如果是只读画布就不清空了。
      * 并且清空时候有错误也静默.
      */
+    @Deprecated
     public void safeClear(){
         try{
             clear();
@@ -506,7 +534,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             entry.getValue().getDataRef().release();
         }
         tiles.clear();
-        synchronized (this) {
+        synchronized (lock) {
             minTileX = Integer.MAX_VALUE;
             maxTileX = Integer.MIN_VALUE;
             minTileY = Integer.MAX_VALUE;
@@ -699,7 +727,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 tiles.put(key, newTile);
             }
 
-            synchronized (this) {
+            synchronized (lock) {
                 updateExtent(unpackTx(key), unpackTy(key));
             }
         }
@@ -736,7 +764,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 // 不存在：外部 acquire 一次，代表当前画布持有
                 srcData.acquire();
                 this.tiles.put(key, tileFactory.create(tx, ty, srcData));
-                synchronized (this) {
+                synchronized (lock) {
                     updateExtent(tx, ty);
                 }
             }
@@ -753,6 +781,58 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 removed.getDataRef().release();
             }
         }
+    }
+
+    /**
+     * 版本化合并——把 {@code source} 中版本与本画布一致的瓦片数据并入。
+     *
+     * <p><b>语义</b>：逐瓦片比对版本，仅当本画布该位置的瓦片版本仍等于
+     * {@code source} 对应瓦片的版本时，用 source 的 data 替换本画布的。
+     * 版本不等的位置跳过——说明本画布该瓦片在快照之后被改过，source
+     * 携带的是过期内容，不可覆盖。
+     *
+     * <p><b>版本判据</b>：由 {@link VersionedTile#version()} 提供。
+     * COW 语义下引用相等即同一版本——任何写入都会替换 data 引用，
+     * 导致版本前移，本方法对该瓦片放弃合并。不实现 {@link VersionedTile}
+     * 的 data 退化为引用本身，只要实例不被换掉版本就不变。
+     *
+     * <p><b>方向性</b>：本画布是目标，{@code source} 是来源。source 携带
+     * 的形态（例如带 GPU 装饰的瓦片）会覆盖本画布对应位置的现有形态。
+     * 调用方需确保 source 是期望的权威形态——方向反了会丢失装饰。
+     *
+     * <p><b>所有权</b>：本方法不接管 {@code source}。成功的瓦片对 source
+     * 的 data 做 acquire 一份给本画布；失败的位置不动。source 在方法返回
+     * 后仍归调用方所有，其引用计数、生命周期不受本方法影响。
+     *
+     * <p><b>原子性</b>：逐瓦片粒度。某块瓦片版本不符只影响该位置，
+     * 其余瓦片照常合并。返回值是实际合并的瓦片数，不做全有或全无保证——
+     * 若需全有或全无语义，调用方自行编排。
+     *
+     * <p><b>前置条件</b>：本画布可写（{@link #checkWritable()} 通过）。
+     *
+     * <p><b>线程契约</b>：本画布的写入受内部同步保护；{@code source}
+     * 在调用期间需对调用方独占——本方法只读 source，但并发修改 source
+     * 会导致读到不一致的版本/数据对。
+     *
+     * @param source 来源画布，不得为 null
+     * @return 实际合并的瓦片数；0 表示没有任何瓦片版本匹配
+     * @throws IllegalArgumentException source 为 null
+     * @throws IllegalStateException    本画布不可写
+     */
+    public int compareAndMerge(TiledCanvas source) {
+        if (source == null) {
+            throw new IllegalArgumentException("source must not be null");
+        }
+        checkWritable();
+        int merged = 0;
+        for (Map.Entry<Long, Tile> e : source.tiles.entrySet()) {
+            Tile dst = this.tiles.get(e.getKey());
+            if (dst == null) continue;
+            if (dst.compareAndReplaceData(e.getValue())) {
+                merged++;
+            }
+        }
+        return merged;
     }
 
     @Deprecated
@@ -849,7 +929,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
 
         // 有删除才重算 extent
         if (!toRemove.isEmpty()) {
-            synchronized (this) {
+            synchronized (lock) {
                 recomputeExtent();
             }
         }
@@ -860,7 +940,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     @Override
     public void close() throws Exception {
         if (closed) return;                        // 快速路径——无锁
-        synchronized (this) {
+        synchronized (lock) {
             if (closed) return;                    // 双检——幂等
             closed = true;                         // 先置标志——后续写操作立即拒绝
 
@@ -919,6 +999,5 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             pool.release(sample11);
         }
     }
-
 
 }
