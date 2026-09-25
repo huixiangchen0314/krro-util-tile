@@ -811,7 +811,11 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     public TiledCanvas keepTiles(Set<Long> keys) {
         checkWritable();
 
-        if (keys == null || keys.isEmpty()) {
+        if (keys == null) {
+            throw new IllegalArgumentException("keys must not be null");
+        }
+
+        if (keys.isEmpty()) {
             clear();
             return this;
         }
