@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 瓦片画布 —— 高性能 RGBA float 图像存储，支持负索引和动态扩展。
@@ -161,6 +162,14 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         return tiles.get(pack(tx, ty));
     }
 
+    public Tile getTile(Long key) {
+        return tiles.get(key);
+    }
+
+    public Tile getTile(long key) {
+        return tiles.get(key);
+    }
+
 
     @Override
     public Set<Long> getTiles() {
@@ -219,6 +228,15 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         return tile;
     }
 
+    public Tile ensureTile(Long key){
+        return ensureTile(unpackTx(key), unpackTy(key));
+    }
+
+    public TiledCanvas ensureTiles(Set<Long> keys) {
+        keys.forEach(this::ensureTile);
+        return this;
+    }
+
     public void deleteTile(int tx, int ty) {
         checkWritable();
 
@@ -268,11 +286,14 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
     public void replaceTile(Tile tile) {
         if (tile == null) throw new IllegalArgumentException("tile cannot be null");
         TileData dataRef = tile.getDataRef();
-        replaceTile(tile.tx(), tile.ty(), dataRef);
+        replaceTileShared(tile.tx(), tile.ty(), dataRef);
     }
 
-    public void replaceTile(int tx, int ty, TileData tileData) {
-        replaceTileShared(tx, ty, tileData);
+
+
+    public void replaceTile(int tx, int ty, Supplier<TileData> factory) {
+        TileData tileData = factory.get();
+        replaceTileOwned(tx, ty, tileData);
     }
 
     private void replaceTileShared(int tx, int ty, TileData tileData) {
