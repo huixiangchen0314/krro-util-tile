@@ -74,7 +74,6 @@ public abstract class Tile implements VersionedTile{
         return type.isInstance(data) ? type.cast(data) : null;
     }
 
-
     public abstract int tx();
 
     public abstract int ty();
@@ -85,13 +84,25 @@ public abstract class Tile implements VersionedTile{
     @Deprecated
     public abstract void getPixel(int localX, int localY, float[] out, int tileSize);
 
+    /**
+     * 写入瓦片数据，自动转堆内存
+     */
     public abstract void setPixel(int localX, int localY, float[] pixel,
                   int tileSize, int channels);
 
+    /**
+     * 读取瓦片数据，字段转堆内存
+     */
     public abstract void getPixel(int localX, int localY, float[] out,
                   int tileSize, int channels);
 
+    /**
+     * 读取瓦片数组，自动转堆内存数据
+     */
     public abstract float[] getPixelsSnapshot();
 
+    /**
+     * 写瓦片数组，自动转堆内存
+     */
     public abstract float[] getPixelsForWrite();
 }

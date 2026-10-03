@@ -106,7 +106,7 @@ public class AbstractTile extends Tile {
     public synchronized void setPixel(int localX, int localY, float[] pixel,
                                       int tileSize, int channels) {
         ensureWritable();
-        float[] pix = data.getPixels();
+        float[] pix = ((HeapTileData )data).getPixels();
         int idx = (localY * tileSize + localX) * channels;
         System.arraycopy(pixel, 0, pix, idx, channels);
     }
@@ -117,20 +117,22 @@ public class AbstractTile extends Tile {
     @Override
     public synchronized void getPixel(int localX, int localY, float[] out,
                                       int tileSize, int channels) {
-        float[] pix = data.getPixels();
+        ensureHeapTileData();
+        float[] pix = ((HeapTileData)data).getPixels();
         int idx = (localY * tileSize + localX) * channels;
         System.arraycopy(pix, idx, out, 0, channels);
     }
 
     @Override
     public synchronized float[] getPixelsSnapshot() {
-        return data.getPixels();
+        ensureHeapTileData();
+        return ((HeapTileData)data).getPixels();
     }
 
     @Override
     public synchronized float[] getPixelsForWrite() {
         ensureWritable();
-        return data.getPixels();
+        return ((HeapTileData)data).getPixels();
     }
 
     /**
