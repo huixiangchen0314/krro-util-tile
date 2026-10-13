@@ -209,23 +209,25 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
 
         long key = pack(tx, ty);
         Tile tile = tiles.get(key);
-        if (tile == null) {
-            float[] raw = allocateTile();
-            fillTileWithDefault(raw);
-            HeapTileData data = new HeapTileData(raw);
-            Tile newTile = tileFactory.create(tx, ty, data);
-            Tile existing = tiles.putIfAbsent(key, newTile);
-            if (existing != null) {
-                data.release();
-                return existing;
-            }
-            // 注册到全局管理器
-            synchronized (lock) {
-                updateExtent(tx, ty);
-            }
-            return newTile;
+
+        // 快速路径
+        if (tile != null) {
+            return tile;
         }
-        return tile;
+
+        float[] raw = allocateTile();
+        fillTileWithDefault(raw);
+        HeapTileData data = new HeapTileData(raw);
+        Tile newTile = createTile(tx, ty, data);
+        Tile existing = tiles.putIfAbsent(key, newTile);
+        if (existing != null) {
+            data.release();
+            return existing;
+        }
+        synchronized (lock) {
+            updateExtent(tx, ty);
+        }
+        return newTile;
     }
 
     public Tile ensureTile(Long key){
@@ -289,8 +291,6 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         replaceTileShared(tile.tx(), tile.ty(), dataRef);
     }
 
-
-
     public void replaceTile(int tx, int ty, Supplier<TileData> factory) {
         TileData tileData = factory.get();
         replaceTileOwned(tx, ty, tileData);
@@ -309,10 +309,16 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             }else {
                 // 外部提供的数据，提升引用计数
                 tileData.acquire();
-                Tile tile = tileFactory.create(tx, ty, tileData);
+                Tile tile = createTile(tx, ty, tileData);
                 this.tiles.put(tileKey, tile);
             }
         }
+    }
+
+    private Tile createTile(int tx, int ty, TileData tileData) {
+        Tile tile = tileFactory.create(tx, ty, tileData);
+        tile.attach(this);
+        return tile;
     }
 
     private void replaceTileOwned(int tx, int ty, TileData tileData) {
@@ -325,7 +331,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                 oldTile.replaceDataOwned(tileData);
             } else {
                 // 外部提供的数据内部创建的数据，获取初始的 1。
-                Tile tile = tileFactory.create(tx, ty, tileData);
+                Tile tile = createTile(tx, ty, tileData);
                 this.tiles.put(tileKey, tile);
             }
         }
@@ -496,7 +502,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
                         float[] raw = allocateTile();
                         fillTileWithColor(raw, color);
                         HeapTileData data = new HeapTileData(raw);
-                        Tile newTile = tileFactory.create(tx, ty, data);
+                        Tile newTile = createTile(tx, ty, data);
                         Tile existing = tiles.putIfAbsent(pack(tx, ty), newTile);
                         if (existing != null) {
                             data.release();
@@ -744,7 +750,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             if (existingTile != null) {
                 existingTile.replaceData(newData);   // 内部管理引用计数
             } else {
-                Tile newTile = tileFactory.create(unpackTx(key), unpackTy(key), newData);
+                Tile newTile = createTile(unpackTx(key), unpackTy(key), newData);
                 tiles.put(key, newTile);
             }
 
@@ -784,7 +790,7 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
             } else {
                 // 不存在：外部 acquire 一次，代表当前画布持有
                 srcData.acquire();
-                this.tiles.put(key, tileFactory.create(tx, ty, srcData));
+                this.tiles.put(key, createTile(tx, ty, srcData));
                 synchronized (lock) {
                     updateExtent(tx, ty);
                 }

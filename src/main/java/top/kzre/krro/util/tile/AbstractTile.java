@@ -3,6 +3,7 @@ package top.kzre.krro.util.tile;
 public class AbstractTile extends Tile {
     private final int tx, ty;
     private volatile TileData data;
+    private volatile  TiledCanvas canvas;
 
     /**
      * 构造 Tile，直接持有传入的 data（假设 data 已经包含初始引用）。
@@ -40,14 +41,14 @@ public class AbstractTile extends Tile {
             return;    // 已是 HeapTileData，无需转换
         }
 
-        // ── 降级路径埋点：谁在把 GPU 瓦片换回 CPU ──
-        {
-            StringBuilder sb = new StringBuilder("TileData lifted:");
-            for (StackTraceElement e : new Throwable().getStackTrace()) {
-                sb.append("\n>>>>>at ").append(e);
-            }
-            System.out.println(sb);
-        }
+//        // ── 降级路径埋点：谁在把 GPU 瓦片换回 CPU ──
+//        {
+//            StringBuilder sb = new StringBuilder("TileData lifted:");
+//            for (StackTraceElement e : new Throwable().getStackTrace()) {
+//                sb.append("\n>>>>>at ").append(e);
+//            }
+//            System.out.println(sb);
+//        }
 
 
         int floatCount = current.getByteSize() / Float.BYTES;
@@ -133,6 +134,24 @@ public class AbstractTile extends Tile {
     public synchronized float[] getPixelsForWrite() {
         ensureWritable();
         return ((HeapTileData)data).getPixels();
+    }
+
+    @Override
+    void attach(TiledCanvas canvas) {
+        if (canvas == null) {
+            throw new IllegalArgumentException("canvas must not be null");
+        }
+
+        TiledCanvas c = this.canvas;
+        if (c != null){
+            throw new IllegalStateException("canvas already exists");
+        }
+        this.canvas = canvas;
+    }
+
+    @Override
+    public boolean isValid() {
+        return this.canvas != null && !canvas.isClosed();
     }
 
     /**
