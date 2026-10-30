@@ -1,8 +1,6 @@
 package top.kzre.krro.util.tile;
 
 import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.java.Log;
 import top.kzre.krro.util.pool.FloatsHolder;
 import top.kzre.krro.util.pool.FloatsPool;
 import top.kzre.krro.util.pool.PoolManagers;
@@ -11,6 +9,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -943,6 +942,40 @@ public final class TiledCanvas implements Canvas, AutoCloseable {
         List<Long> toRemove = new ArrayList<>();
         for (Long key : tiles.keySet()) {
             if (!keys.contains(key)) {
+                toRemove.add(key);
+            }
+        }
+
+        for (Long key : toRemove) {
+            Tile removed = tiles.remove(key);
+            if (removed != null) {
+                removed.getDataRef().release();
+            }
+        }
+
+        // 有删除才重算 extent
+        if (!toRemove.isEmpty()) {
+            synchronized (lock) {
+                recomputeExtent();
+            }
+        }
+
+        return this;
+    }
+
+    public TiledCanvas keepTiles(Predicate<Tile> filter) {
+        checkWritable();
+
+        if (filter == null) {
+            throw new IllegalArgumentException("filter must not be null");
+        }
+
+        // 先收集要删除的 key，避免边遍历边删
+        // ConcurrentHashMap 的 keySet 迭代弱一致——安全但语义不清晰
+        List<Long> toRemove = new ArrayList<>();
+        for (Long key : tiles.keySet()) {
+            Tile tile = tiles.get(key);
+            if (!filter.test(tile)) {
                 toRemove.add(key);
             }
         }
